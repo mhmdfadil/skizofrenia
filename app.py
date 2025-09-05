@@ -11,59 +11,181 @@ from datetime import timedelta
 import pyswarms as ps
 from io import BytesIO
 from sklearn.tree import export_text
+import time
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 # ===================== KONFIGURASI HALAMAN =====================
 st.set_page_config(
     page_title="Klasifikasi Durasi Rawat Inap Pasien Skizofrenia",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
+    page_icon="🏥"
 )
 
-# ===================== STYLING =====================
+# ===================== STYLING CUSTOM =====================
 st.markdown("""
 <style>
+    /* Global Styles */
     .main {
-        background-color: #f5f9fc;
+        background: linear-gradient(135deg, #e6f7ff 0%, #f0f8ff 100%);
+        padding: 0;
+    }
+    
+    .stApp {
+        background: linear-gradient(135deg, #e6f7ff 0%, #f0f8ff 100%);
+    }
+    
+    /* Header Styles */
+    .main-header {
+        background: linear-gradient(90deg, #2b5876 0%, #4b86b4 100%);
         padding: 2rem;
-    }
-    .sidebar .sidebar-content {
-        background-color: #ffffff;
-        padding: 1rem;
-    }
-    h1 {
-        color: #2b5876;
-        border-bottom: 2px solid #4b86b4;
-        padding-bottom: 10px;
-    }
-    h2 {
-        color: #3a7ca5;
-        margin-top: 1.5rem;
-    }
-    .stButton>button {
-        background-color: #4b86b4;
+        border-radius: 0 0 20px 20px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        margin-bottom: 2rem;
         color: white;
-        font-weight: bold;
-        border-radius: 5px;
-        padding: 0.5rem 1rem;
+        text-align: center;
     }
-    .stButton>button:hover {
-        background-color: #2b5876;
+    
+    .main-title {
+        font-size: 2.8rem;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+        color: white;
     }
-    .highlight-box {
-        background-color: #e7f0f7;
+    
+    .main-subtitle {
+        font-size: 1.2rem;
+        color: rgba(255, 255, 255, 0.9);
+        margin-bottom: 1rem;
+    }
+    
+    /* Card Styles */
+    .custom-card {
+        background: rgba(255, 255, 255, 0.9);
+        backdrop-filter: blur(10px);
+        border-radius: 15px;
+        padding: 1.5rem;
+        box-shadow: 0 8px 32px rgba(31, 38, 135, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.5);
+        margin-bottom: 1.5rem;
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    
+    .custom-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 12px 40px rgba(31, 38, 135, 0.2);
+    }
+    
+    /* Button Styles */
+    .stButton>button {
+        background: linear-gradient(90deg, #4b86b4 0%, #63a4ff 100%);
+        color: white;
+        font-weight: 600;
         border-radius: 10px;
-        padding: 1rem;
-        margin: 1rem 0;
+        padding: 0.7rem 1.5rem;
+        border: none;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 15px rgba(75, 134, 180, 0.3);
+    }
+    
+    .stButton>button:hover {
+        background: linear-gradient(90deg, #2b5876 0%, #4b86b4 100%);
+        transform: scale(1.05);
+        box-shadow: 0 6px 20px rgba(43, 88, 118, 0.4);
+    }
+    
+    /* Sidebar Styles */
+    .sidebar .sidebar-content {
+        background: linear-gradient(180deg, #2b5876 0%, #4b86b4 100%);
+        color: white;
+        padding: 2rem 1rem;
+    }
+    
+    .sidebar-title {
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin-bottom: 2rem;
+        text-align: center;
+        color: white;
+    }
+    
+    /* Tab Styles */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        background: rgba(255, 255, 255, 0.5);
+        border-radius: 10px 10px 0 0;
+        padding: 1rem 1.5rem;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+    
+    .stTabs [aria-selected="true"] {
+        background: linear-gradient(90deg, #4b86b4 0%, #63a4ff 100%);
+        color: white;
+    }
+    
+    /* Metric Cards */
+    .metric-card {
+        background: linear-gradient(135deg, #4b86b4 0%, #63a4ff 100%);
+        border-radius: 15px;
+        padding: 1.5rem;
+        color: white;
+        text-align: center;
+        box-shadow: 0 8px 20px rgba(75, 134, 180, 0.3);
+    }
+    
+    .metric-title {
+        font-size: 1rem;
+        font-weight: 500;
+        margin-bottom: 0.5rem;
+    }
+    
+    .metric-value {
+        font-size: 2rem;
+        font-weight: 700;
+    }
+    
+    /* Animation Keyframes */
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .fade-in {
+        animation: fadeIn 1s ease forwards;
+    }
+    
+    /* Progress Bar */
+    .stProgress > div > div > div > div {
+        background: linear-gradient(90deg, #4b86b4 0%, #63a4ff 100%);
+    }
+    
+    /* File Uploader */
+    .stFileUploader > div > div {
+        border: 2px dashed #4b86b4;
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.5);
+    }
+    
+    /* Expander */
+    .streamlit-expanderHeader {
+        background: linear-gradient(90deg, rgba(75, 134, 180, 0.1) 0%, rgba(99, 164, 255, 0.1) 100%);
+        border-radius: 10px;
+        font-weight: 600;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# ===================== JUDUL =====================
-st.title("🧠 Klasifikasi Durasi Rawat Inap Pasien Skizofrenia")
+# ===================== JUDUL & HEADER =====================
 st.markdown("""
-<div style='color:#5d707f; font-size:1.1rem;'>
-    Aplikasi ini digunakan untuk menganalisis dan mengklasifikasikan lama rawat inap pasien skizofrenia 
-    di RSUD Muyang Kute menggunakan kombinasi algoritma C4.5 dan Particle Swarm Optimization (PSO).
+<div class="main-header fade-in">
+    <h1 class="main-title">🏥 Klasifikasi Durasi Rawat Inap Pasien Skizofrenia</h1>
+    <p class="main-subtitle">Analisis Canggih dengan Algoritma C4.5 dan Particle Swarm Optimization (PSO)</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -210,20 +332,60 @@ def train_models(X_train, X_test, y_train, y_test):
         }
     }
 
+# ===================== SIDEBAR =====================
+with st.sidebar:
+    st.markdown('<h1 class="sidebar-title">📊 Menu Analisis</h1>', unsafe_allow_html=True)
+    
+    uploaded_file = st.file_uploader(
+        "📁 Unggah Data Pasien (Excel)", 
+        type=["xlsx"],
+        help="File harus mengandung kolom: Tanggal Masuk, Tanggal Keluar"
+    )
+    
+    st.markdown("---")
+    
+    with st.expander("ℹ️ Panduan Penggunaan"):
+        st.info("""
+        1. Unggah file Excel dengan data pasien
+        2. Data akan diproses secara otomatis
+        3. Jelajahi berbagai tab untuk melihat analisis
+        4. Gunakan fitur prediksi untuk kasus baru
+        """)
+    
+    st.markdown("---")
+    
+    st.markdown("""
+    <div style="padding: 1rem; background: rgba(255, 255, 255, 0.1); border-radius: 10px;">
+        <h4 style="margin-bottom: 0.5rem;">📋 Informasi Dataset</h4>
+        <p style="font-size: 0.9rem; margin-bottom: 0;">Pastikan dataset Anda mengandung:</p>
+        <ul style="font-size: 0.8rem;">
+            <li>Kolom Tanggal Masuk</li>
+            <li>Kolom Tanggal Keluar</li>
+            <li>Kolom Diagnosa</li>
+        </ul>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("---")
+    st.markdown("**Dikembangkan oleh:**")
+    st.markdown("Putri Agustina Dewi")
+    st.markdown("Teknik Informatika, Universitas Malikussaleh")
+    st.markdown("© 2025")
+
 # ===================== MAIN APP =====================
 df_raw = None
-uploaded_file = st.sidebar.file_uploader(
-    "📁 Unggah Data Pasien (Excel)", 
-    type=["xlsx"],
-    help="File harus mengandung kolom: Tanggal Masuk, Tanggal Keluar"
-)
 
 if uploaded_file:
     try:
-        df_raw = pd.read_excel(uploaded_file)
-        st.sidebar.success("✅ File berhasil diunggah!")
-        
-        with st.spinner("Memproses data..."):
+        with st.spinner('🔄 Memuat dan memproses data...'):
+            progress_bar = st.progress(0)
+            for i in range(100):
+                time.sleep(0.01)
+                progress_bar.progress(i + 1)
+            
+            df_raw = pd.read_excel(uploaded_file)
+            st.sidebar.success("✅ File berhasil diunggah!")
+            
             df_processed = preprocess_data(df_raw)
         
         # Verifikasi kolom
@@ -251,7 +413,7 @@ if uploaded_file:
             stratify=y
         )
         
-        with st.spinner("Melatih model..."):
+        with st.spinner("🧠 Melatih model dengan algoritma C4.5 dan PSO..."):
             model_results = train_models(X_train, X_test, y_train, y_test)
         
         # ===================== TABBED INTERFACE =====================
@@ -264,50 +426,164 @@ if uploaded_file:
         ])
         
         with tab1:
-            st.subheader("Ikhtisar Data")
-            st.dataframe(df_processed.head())
+            col1, col2 = st.columns([2, 1])
             
-            col1, col2 = st.columns(2)
             with col1:
-                st.markdown("### Distribusi Durasi")
-                fig1, ax1 = plt.subplots()
-                sns.histplot(df_processed['Durasi Rawat Inap (Hari)'], bins=15, kde=True, ax=ax1)
-                ax1.set_xlabel("Hari")
-                st.pyplot(fig1)
+                st.markdown('<div class="custom-card"><h3>📋 Preview Data</h3>', unsafe_allow_html=True)
+                st.dataframe(df_processed.head(), use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
                 
             with col2:
-                st.markdown("### Distribusi Kategori")
-                fig2, ax2 = plt.subplots()
-                df_processed['Kategori Durasi'].value_counts().plot.pie(
-                    autopct='%1.1f%%', 
-                    colors=['#66b3ff','#99ccff','#cce6ff'],
-                    ax=ax2
-                )
-                st.pyplot(fig2)
+                st.markdown('<div class="custom-card"><h3>📈 Statistik Data</h3>', unsafe_allow_html=True)
+                st.metric("Total Sampel", len(df_processed))
+                st.metric("Jumlah Fitur", len(df_processed.columns))
+                st.metric("Rata-rata Durasi", f"{df_processed['Durasi Rawat Inap (Hari)'].mean():.1f} Hari")
+                st.markdown('</div>', unsafe_allow_html=True)
             
-            st.markdown(f"""
-            <div class="highlight-box">
-                <h4>📌 Informasi Data</h4>
-                <ul>
-                    <li>Total sampel: <strong>{len(df_processed)}</strong></li>
-                    <li>Durasi singkat (1-5 hari): <strong>{len(df_processed[df_processed['Kategori Durasi'] == 'Singkat'])}</strong></li>
-                    <li>Durasi sedang (6-10 hari): <strong>{len(df_processed[df_processed['Kategori Durasi'] == 'Sedang'])}</strong></li>
-                    <li>Durasi lama (>10 hari): <strong>{len(df_processed[df_processed['Kategori Durasi'] == 'Lama'])}</strong></li>
-                </ul>
-            </div>
-            """, unsafe_allow_html=True)
+            col3, col4 = st.columns(2)
+            
+            with col3:
+                st.markdown('<div class="custom-card"><h3>📊 Distribusi Durasi</h3>', unsafe_allow_html=True)
+                fig1 = px.histogram(
+                    df_processed, 
+                    x='Durasi Rawat Inap (Hari)',
+                    nbins=15,
+                    color_discrete_sequence=['#4b86b4']
+                )
+                fig1.update_layout(
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                )
+                st.plotly_chart(fig1, use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+                
+            with col4:
+                st.markdown('<div class="custom-card"><h3>🍩 Distribusi Kategori</h3>', unsafe_allow_html=True)
+                kategori_count = df_processed['Kategori Durasi'].value_counts()
+                fig2 = px.pie(
+                    values=kategori_count.values,
+                    names=kategori_count.index,
+                    color_discrete_sequence=['#2b5876', '#4b86b4', '#63a4ff']
+                )
+                fig2.update_layout(
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                )
+                st.plotly_chart(fig2, use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+            
+            st.markdown('<div class="custom-card"><h3>📌 Informasi Data</h3>', unsafe_allow_html=True)
+            col5, col6, col7 = st.columns(3)
+            
+            with col5:
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-title">Singkat (1-5 hari)</div>
+                    <div class="metric-value">{len(df_processed[df_processed['Kategori Durasi'] == 'Singkat'])}</div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+            with col6:
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-title">Sedang (6-10 hari)</div>
+                    <div class="metric-value">{len(df_processed[df_processed['Kategori Durasi'] == 'Sedang'])}</div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+            with col7:
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-title">Lama (>10 hari)</div>
+                    <div class="metric-value">{len(df_processed[df_processed['Kategori Durasi'] == 'Lama'])}</div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+            st.markdown('</div>', unsafe_allow_html=True)
         
         with tab2:
-            st.subheader("Hasil Optimasi")
-            st.write(f"Parameter Terbaik: Max Depth = {model_results['best_params']['max_depth']}, Min Samples = {model_results['best_params']['min_samples']}")
-            st.write(f"MAPE Dasar: {model_results['base_mape']:.2f}%") 
-            st.write(f"MAPE Model Optimasi: {model_results['optim_mape']:.2f}%") 
+            st.markdown('<div class="custom-card"><h3>⚙️ Parameter Model Optimal</h3>', unsafe_allow_html=True)
+            col8, col9 = st.columns(2)
             
-            col1, col2 = st.columns(2)
-            with col1:
-                st.markdown("#### Model C4.5 Dasar")
-                st.metric("Akurasi", f"{model_results['base_accuracy']:.2%}")
-                st.metric("MAPE", f"{model_results['base_mape']:.2f}%")
+            with col8:
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-title">Max Depth</div>
+                    <div class="metric-value">{model_results['best_params']['max_depth']}</div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+            with col9:
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-title">Min Samples Split</div>
+                    <div class="metric-value">{model_results['best_params']['min_samples']}</div>
+                </div>
+                """, unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+            col10, col11 = st.columns(2)
+            
+            with col10:
+                st.markdown('<div class="custom-card"><h3>📊 Model C4.5 Dasar</h3>', unsafe_allow_html=True)
+                st.metric("Akurasi", f"{model_results['base_accuracy']:.2%}", delta=None)
+                st.metric("MAPE", f"{model_results['base_mape']:.2f}%", delta=None)
+                
+                # Visualisasi akurasi
+                fig_base = go.Figure(go.Indicator(
+                    mode = "gauge+number+delta",
+                    value = model_results['base_accuracy'] * 100,
+                    domain = {'x': [0, 1], 'y': [0, 1]},
+                    title = {'text': "Akurasi Model Dasar (%)"},
+                    gauge = {
+                        'axis': {'range': [0, 100]},
+                        'bar': {'color': "#4b86b4"},
+                        'steps': [
+                            {'range': [0, 70], 'color': "lightgray"},
+                            {'range': [70, 90], 'color': "gray"},
+                            {'range': [90, 100], 'color': "lightblue"}
+                        ],
+                    }
+                ))
+                fig_base.update_layout(height=300)
+                st.plotly_chart(fig_base, use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+                
+            with col11:
+                st.markdown('<div class="custom-card"><h3>🚀 Model C4.5+PSO</h3>', unsafe_allow_html=True)
+                improvement = model_results['optim_accuracy'] - model_results['base_accuracy']
+                st.metric("Akurasi", f"{model_results['optim_accuracy']:.2%}", 
+                         delta=f"{improvement:.2%}" if improvement > 0 else None)
+                st.metric("MAPE", f"{model_results['optim_mape']:.2f}%", 
+                         delta=f"{- (model_results['optim_mape'] - model_results['base_mape']):.2f}%" 
+                         if model_results['optim_mape'] < model_results['base_mape'] else None)
+                
+                # Visualisasi akurasi
+                fig_optim = go.Figure(go.Indicator(
+                    mode = "gauge+number+delta",
+                    value = model_results['optim_accuracy'] * 100,
+                    domain = {'x': [0, 1], 'y': [0, 1]},
+                    title = {'text': "Akurasi Model Optimasi (%)"},
+                    gauge = {
+                        'axis': {'range': [0, 100]},
+                        'bar': {'color': "#2b5876"},
+                        'steps': [
+                            {'range': [0, 70], 'color': "lightgray"},
+                            {'range': [70, 90], 'color': "gray"},
+                            {'range': [90, 100], 'color': "lightblue"}
+                        ],
+                    }
+                ))
+                fig_optim.update_layout(height=300)
+                st.plotly_chart(fig_optim, use_container_width=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+            
+            # Laporan klasifikasi
+            st.markdown('<div class="custom-card"><h3>📋 Laporan Klasifikasi</h3>', unsafe_allow_html=True)
+            col12, col13 = st.columns(2)
+            
+            with col12:
+                st.markdown("**Model Dasar**")
                 st.code(
                     classification_report(
                         model_results['y_test'], 
@@ -316,10 +592,8 @@ if uploaded_file:
                     )
                 )
                 
-            with col2:
-                st.markdown("#### Model C4.5+PSO")
-                st.metric("Akurasi", f"{model_results['optim_accuracy']:.2%}")
-                st.metric("MAPE", f"{model_results['optim_mape']:.2f}%")
+            with col13:
+                st.markdown("**Model Optimasi**")
                 st.code(
                     classification_report(
                         model_results['y_test'], 
@@ -327,21 +601,9 @@ if uploaded_file:
                         target_names=['Singkat', 'Sedang', 'Lama']
                     )
                 )
-                
-            improvement = model_results['optim_accuracy'] - model_results['base_accuracy']
-            st.markdown(f"""
-            <div class="highlight-box">
-                <h4>🔍 Temuan Utama</h4>
-                <p>Model optimasi menunjukkan peningkatan akurasi sebesar <strong>{improvement:.2%}</strong></p>
-                <p>Parameter terbaik dari PSO:</p>
-                <ul>
-                    <li>Kedalaman maksimal: <strong>{model_results['best_params']['max_depth']}</strong></li>
-                    <li>Minimum sampel split: <strong>{model_results['best_params']['min_samples']}</strong></li>
-                </ul>
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
             
-            # Simpan prediksi ke Excel
+            # Download hasil prediksi
             output_df = X_test.copy()
             if "label_encoder" in st.session_state:
                 output_df['Aktual'] = st.session_state['label_encoder'].inverse_transform(model_results['y_test'])
@@ -353,23 +615,27 @@ if uploaded_file:
             
             excel_buffer = BytesIO()
             output_df.to_excel(excel_buffer, index=False)
+            
+            st.markdown('<div class="custom-card">', unsafe_allow_html=True)
             st.download_button(
-                label="📥 Unduh Hasil Prediksi",
+                label="📥 Unduh Hasil Prediksi (Excel)",
                 data=excel_buffer,
                 file_name="prediksi.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
+            st.markdown('</div>', unsafe_allow_html=True)
         
         with tab3:
-            st.subheader("Visualisasi Pohon Keputusan")
+            st.markdown('<div class="custom-card"><h3>🌳 Visualisasi Pohon Keputusan</h3>', unsafe_allow_html=True)
             
-            with st.expander("ℹ Tentang visualisasi ini"):
+            with st.expander("ℹ️ Tentang visualisasi ini"):
                 st.write("""
                 Pohon ini menunjukkan proses pengambilan keputusan model C4.5 yang dioptimasi.
                 Setiap node menunjukkan kondisi pembagian berdasarkan durasi rawat inap.
                 """)
             
-            plt.figure(figsize=(25, 15))
+            # Visualisasi pohon keputusan
+            plt.figure(figsize=(20, 12))
             plot_tree(
                 model_results['optimized_model'],
                 feature_names=['Durasi (hari)'],
@@ -377,26 +643,31 @@ if uploaded_file:
                 filled=True,
                 rounded=True,
                 fontsize=10,
-                max_depth=2  # Menunjukkan 2 level pertama untuk kejelasan
+                max_depth=3,  # Menunjukkan 3 level pertama untuk kejelasan
+                impurity=False,
+                proportion=True
             )
             st.pyplot(plt)
+            st.markdown('</div>', unsafe_allow_html=True)
             
-            st.subheader("Representasi Teks")
+            # Representasi teks
+            st.markdown('<div class="custom-card"><h3>📝 Representasi Teks</h3>', unsafe_allow_html=True)
             tree_text = export_text(
                 model_results['optimized_model'],
                 feature_names=['Durasi'],
-                max_depth=2
+                max_depth=3
             )
             st.code(tree_text)
             
             st.download_button(
-                "📥 Unduh Struktur Pohon",
+                "📥 Unduh Struktur Pohon (TXT)",
                 tree_text,
                 file_name="struktur_pohon.txt"
             )
+            st.markdown('</div>', unsafe_allow_html=True)
         
         with tab4:
-            st.subheader("Prediksi Pasien Baru")
+            st.markdown('<div class="custom-card"><h3>🔮 Prediksi Pasien Baru</h3>', unsafe_allow_html=True)
             st.markdown("""
             <div style='color:#666; margin-bottom:20px;'>
                  Masukkan tanggal masuk dan keluar pasien untuk memprediksi kategori durasi rawat inap.
@@ -404,10 +675,10 @@ if uploaded_file:
             """, unsafe_allow_html=True)
 
             with st.form("form_prediksi"):
-                col1, col2 = st.columns(2)
-                with col1:
+                col14, col15 = st.columns(2)
+                with col14:
                     tgl_masuk = st.date_input("Tanggal Masuk", key="tgl_masuk")
-                with col2:
+                with col15:
                     tgl_keluar = st.date_input("Tanggal Keluar", 
                                                 value=tgl_masuk + timedelta(days=7),
                                                 key="tgl_keluar")
@@ -426,37 +697,72 @@ if uploaded_file:
                             prediksi = model_results['optimized_model'].predict([[durasi]])[0]
                             kategori = st.session_state['label_encoder'].inverse_transform([prediksi])[0]
                     
-                            st.success(f"✅ Kategori Durasi Prediksi: *{kategori}*")
+                            # Animasi hasil prediksi
+                            with st.spinner('Memprediksi...'):
+                                time.sleep(1)
+                            
+                            st.success(f"✅ Kategori Durasi Prediksi: **{kategori}**")
                     
-                    # ========== BAGIAN REKOMENDASI LENGKAP ==========
-                            st.markdown("""
-                            <div class="highlight-box">
-                                <h3>📌 Rekomendasi Manajemen Ruangan</h3>
-                                <p><strong>Kategori: {kategori}</strong></p>
-                            """.format(kategori=kategori), unsafe_allow_html=True)
-                    
-                            if kategori == 'Singkat':
-                                st.markdown("""
-                                - *Ruangan*: Gunakan ruangan dengan turnover cepat
-                                - *Perawatan*: Persiapan discharge mulai hari ke-3
-                                - *Sumber Daya*: 1 perawat per 5 pasien
-                                """)
-                            elif kategori == 'Sedang':
-                                st.markdown("""
-                                - *Ruangan*: Ruang perawatan standar
-                                - *Perawatan*: Evaluasi mingguan
-                                - *Sumber Daya*: 1 perawat per 3 pasien
-                                """)
-                            else:
-                                st.markdown("""
-                                - *Ruangan*: Ruang perawatan jangka panjang
-                                - *Perawatan*: Evaluasi harian
-                                - *Sumber Daya*: 1 perawat per 2 pasien
-                                """)
-                    
-                            st.markdown("""
-                            </div>
-                            """, unsafe_allow_html=True)
+                            # Visualisasi hasil prediksi
+                            col16, col17 = st.columns([1, 2])
+                            
+                            with col16:
+                                # Tampilkan indikator kategori
+                                if kategori == 'Singkat':
+                                    color = "#4b86b4"
+                                    icon = "⏱️"
+                                elif kategori == 'Sedang':
+                                    color = "#2b5876"
+                                    icon = "⏳"
+                                else:
+                                    color = "#1e3c5a"
+                                    icon = "⌛"
+                                
+                                fig_pred = go.Figure(go.Indicator(
+                                    mode = "number+delta",
+                                    value = durasi,
+                                    number = {'font': {'size': 40}, 'prefix': icon},
+                                    title = {'text': "Durasi (Hari)", 'font': {'size': 20}},
+                                    delta = {'reference': 5, 'position': "bottom"},
+                                    domain = {'x': [0, 1], 'y': [0, 1]}
+                                ))
+                                
+                                fig_pred.update_layout(
+                                    height=300,
+                                    paper_bgcolor=color,
+                                    font={'color': "white"}
+                                )
+                                st.plotly_chart(fig_pred, use_container_width=True)
+                            
+                            with col17:
+                                # Rekomendasi
+                                st.markdown(f"""
+                                <div style="background: linear-gradient(135deg, {color} 0%, {color}dd 100%); 
+                                            padding: 1.5rem; border-radius: 15px; color: white;">
+                                    <h3>📋 Rekomendasi Manajemen Ruangan</h3>
+                                    <p><strong>Kategori: {kategori}</strong></p>
+                                """, unsafe_allow_html=True)
+                                
+                                if kategori == 'Singkat':
+                                    st.markdown("""
+                                    - *Ruangan*: Gunakan ruangan dengan turnover cepat
+                                    - *Perawatan*: Persiapan discharge mulai hari ke-3
+                                    - *Sumber Daya*: 1 perawat per 5 pasien
+                                    """)
+                                elif kategori == 'Sedang':
+                                    st.markdown("""
+                                    - *Ruangan*: Ruang perawatan standar
+                                    - *Perawatan*: Evaluasi mingguan
+                                    - *Sumber Daya*: 1 perawat per 3 pasien
+                                    """)
+                                else:
+                                    st.markdown("""
+                                    - *Ruangan*: Ruang perawatan jangka panjang
+                                    - *Perawatan*: Evaluasi harian
+                                    - *Sumber Daya*: 1 perawat per 2 pasien
+                                    """)
+                                
+                                st.markdown("</div>", unsafe_allow_html=True)
                     
                         except Exception as e:
                             st.error(f"⚠ Error dalam prediksi: {str(e)}")
@@ -465,46 +771,76 @@ if uploaded_file:
                         st.write("1. Data pasien sudah diunggah")
                         st.write("2. Model sudah selesai dilatih")
                         st.stop()
+            st.markdown('</div>', unsafe_allow_html=True)
 
         with tab5:
-            st.subheader("Estimasi Kebutuhan Ruangan")
+            st.markdown('<div class="custom-card"><h3>🏥 Estimasi Kebutuhan Ruangan</h3>', unsafe_allow_html=True)
             
             # Hitung distribusi pasien
             distribusi = df_processed['Kategori Durasi'].value_counts().reset_index()
             distribusi.columns = ['Kategori', 'Jumlah Pasien']
             
-            # Tampilkan tabel distribusi
-            st.write("### Distribusi Pasien Berdasarkan Durasi")
-            st.dataframe(distribusi)
-            
-            # Visualisasi
-            fig, ax = plt.subplots()
-            sns.barplot(
+            # Visualisasi distribusi
+            fig_dist = px.bar(
+                distribusi,
                 x='Kategori',
                 y='Jumlah Pasien',
-                data=distribusi,
-                palette=['#66b3ff','#99ccff','#cce6ff'],
-                ax=ax
+                color='Kategori',
+                color_discrete_sequence=['#2b5876', '#4b86b4', '#63a4ff'],
+                text='Jumlah Pasien'
             )
-            ax.set_title('Jumlah Pasien per Kategori')
-            st.pyplot(fig)
+            fig_dist.update_layout(
+                title='Distribusi Pasien Berdasarkan Kategori Durasi',
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+            )
+            st.plotly_chart(fig_dist, use_container_width=True)
             
-            # Rekomendasi
+            # Rekomendasi alokasi ruangan
             st.markdown("""
-            <div class="highlight-box">
+            <div style="background: linear-gradient(135deg, #4b86b4 0%, #2b5876 100%); 
+                        padding: 1.5rem; border-radius: 15px; color: white; margin-top: 1rem;">
                 <h3>📊 Rekomendasi Alokasi Ruangan</h3>
                 <p>Berdasarkan data historis:</p>
-                <ul>
             """, unsafe_allow_html=True)
             
-            for _, row in distribusi.iterrows():
+            col18, col19, col20 = st.columns(3)
+            
+            with col18:
+                singkat = distribusi[distribusi['Kategori'] == 'Singkat']['Jumlah Pasien'].values
+                singkat_val = singkat[0] if len(singkat) > 0 else 0
                 st.markdown(f"""
-                <li><strong>{row['Kategori']}</strong>: {row['Jumlah Pasien']} pasien ({row['Jumlah Pasien']/len(df_processed):.1%})</li>
+                <div style="text-align: center; padding: 1rem; background: rgba(255,255,255,0.2); border-radius: 10px;">
+                    <h4>Singkat</h4>
+                    <h2>{singkat_val}</h2>
+                    <p>{singkat_val/len(df_processed)*100:.1f}% dari total</p>
+                </div>
                 """, unsafe_allow_html=True)
                 
+            with col19:
+                sedang = distribusi[distribusi['Kategori'] == 'Sedang']['Jumlah Pasien'].values
+                sedang_val = sedang[0] if len(sedang) > 0 else 0
+                st.markdown(f"""
+                <div style="text-align: center; padding: 1rem; background: rgba(255,255,255,0.2); border-radius: 10px;">
+                    <h4>Sedang</h4>
+                    <h2>{sedang_val}</h2>
+                    <p>{sedang_val/len(df_processed)*100:.1f}% dari total</p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+            with col20:
+                lama = distribusi[distribusi['Kategori'] == 'Lama']['Jumlah Pasien'].values
+                lama_val = lama[0] if len(lama) > 0 else 0
+                st.markdown(f"""
+                <div style="text-align: center; padding: 1rem; background: rgba(255,255,255,0.2); border-radius: 10px;">
+                    <h4>Lama</h4>
+                    <h2>{lama_val}</h2>
+                    <p>{lama_val/len(df_processed)*100:.1f}% dari total</p>
+                </div>
+                """, unsafe_allow_html=True)
+            
             st.markdown("""
-                </ul>
-                <p><strong>Saran:</strong></p>
+                <p style="margin-top: 1.5rem;"><strong>📋 Saran Alokasi:</strong></p>
                 <ul>
                     <li>Ruangan singkat: 5-10% dari total kapasitas</li>
                     <li>Ruangan sedang: 15-20% dari total kapasitas</li>
@@ -512,6 +848,7 @@ if uploaded_file:
                 </ul>
             </div>
             """, unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
 
     except Exception as e:
         st.error(f"""
@@ -521,17 +858,31 @@ if uploaded_file:
         st.write("Pastikan format file sesuai dan data lengkap.")
 
 else:
-    st.info("📌 Silakan unggah file data pasien untuk memulai")
-
-# ===================== FOOTER =====================
-st.sidebar.markdown("---")
-st.sidebar.markdown("*Dikembangkan oleh:*")
-st.sidebar.markdown("Putri Agustina Dewi")
-st.sidebar.markdown("Teknik Informatika, Universitas Malikussaleh")
-st.sidebar.markdown("2025")
-
-with st.sidebar.expander("ℹ Tentang Aplikasi"):
-    st.write("""
-    Aplikasi ini digunakan untuk analisis durasi rawat inap pasien skizofrenia
-    menggunakan algoritma C4.5 dan PSO.
-    """)
+    # Tampilan awal sebelum upload file
+    col21, col22, col23 = st.columns([1, 2, 1])
+    
+    with col22:
+        st.markdown("""
+        <div style="text-align: center; padding: 3rem; background: rgba(255, 255, 255, 0.8); 
+                    border-radius: 20px; margin-top: 2rem; box-shadow: 0 8px 32px rgba(31, 38, 135, 0.1);">
+            <h2 style="color: #2b5876;">Selamat Datang</h2>
+            <p style="color: #5d707f; font-size: 1.1rem;">
+                Silakan unggah file data pasien untuk memulai analisis klasifikasi durasi rawat inap
+            </p>
+            <div style="font-size: 4rem; margin: 1.5rem 0;">📊</div>
+            <p style="color: #5d707f;">
+                Gunakan menu di sidebar untuk mengunggah file Excel Anda
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Fitur animasi
+        st.markdown("""
+        <div style="text-align: center; margin-top: 2rem;">
+            <lottie-player src="https://assets1.lottiefiles.com/packages/lf20_ukaaZq.json"  
+                background="transparent" speed="1" style="width: 300px; height: 300px; margin: 0 auto;" 
+                loop autoplay>
+            </lottie-player>
+        </div>
+        <script src="https://unpkg.com/@lottiefiles/lottie-player@latest/dist/lottie-player.js"></script>
+        """, unsafe_allow_html=True)
