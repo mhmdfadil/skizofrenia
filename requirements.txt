@@ -7,3 +7,4 @@ openpyxl
 scikit-learn
 pyswarms
 matplotlib
+plotly
