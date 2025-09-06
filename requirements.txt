@@ -8,3 +8,6 @@ scikit-learn
 pyswarms
 matplotlib
 plotly
+python-dotenv
+dotenv
+psycopg2
