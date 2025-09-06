@@ -911,7 +911,7 @@ def show_dashboard():
         [data-testid="stSidebar"] {
             background: rgba(255, 255, 255, 0.2) !important;
             backdrop-filter: blur(10px);
-            min-width:230px;
+            width:290px;
             border-right: 1px solid rgba(255, 255, 255, 0.3);
         }
         
