@@ -8,6 +8,7 @@ import numpy as np
 # Seaborn dan Matplotlib: untuk visualisasi data
 import seaborn as sns
 import matplotlib.pyplot as plt
+from matplotlib.patches import FancyBboxPatch, Patch
 
 # Scikit-learn: untuk machine learning
 from sklearn.model_selection import train_test_split
@@ -806,200 +807,242 @@ def train_models(X_train, X_test, y_train_clf, y_test_clf, y_train_dur, y_test_d
     }
 
 # ===================== FUNGSI VISUALISASI POHON KEPUTUSAN (DARK THEME) =====================
-def plot_decision_tree_dark(model, feature_names, class_names):
+def plot_decision_tree_dark(model, feature_names, class_names, max_depth=4):
     """
-    Menggambar pohon keputusan dengan latar terang (cocok untuk st.pyplot)
-    dan warna yang bervariasi antar node.
-
-    Teknik pewarnaan: karena semua node pada dataset ini didominasi kelas
-    'Sedang', pewarnaan berdasarkan majority class menghasilkan pohon
-    monokrom. Solusi: warnai setiap kotak node dengan warna kelas KEDUA
-    tertinggi (minority terbesar), sehingga perbedaan distribusi antar
-    node terlihat secara visual.
-
-    Layout: daun ditata merata dari kiri ke kanan (in-order traversal),
-    node internal diposisikan di tengah antara daun-daun anak-cucu mereka.
+    Menggambar pohon keputusan dengan visualisasi yang jelas dan mudah dibaca.
+    - Ukuran node lebih besar
+    - Font size lebih besar untuk keterbacaan
+    - Kontras warna yang baik antara background dan text
+    - Layout yang teroptimasi untuk berbagai ukuran pohon
+    - Max depth dibatasi 4 level untuk visualisasi yang tidak terlalu kompleks
+    
+    Parameters:
+    -----------
+    model : DecisionTreeClassifier
+        Model pohon keputusan yang sudah dilatih
+    feature_names : list
+        Nama-nama fitur
+    class_names : list
+        Nama-nama kelas
+    max_depth : int, default=4
+        Kedalaman maksimal pohon yang akan divisualisasikan
     """
-    from matplotlib.patches import FancyBboxPatch, Patch
+    tree = model.tree_
+    
+    # Palet warna yang lebih soft dan kontras tinggi
+    BG = '#ffffff'  # Background putih bersih
+    NODE_COLORS = {
+        0: '#ffcccc',  # Merah muda untuk Lama
+        1: '#ccffcc',  # Hijau muda untuk Sedang
+        2: '#cce5ff'   # Biru muda untuk Singkat
+    }
+    EDGE_COLOR = '#2c3e50'  # Abu gelap untuk edge
+    TEXT_MAIN = '#1a1a1a'   # Hitam untuk text utama
+    TEXT_SEC = '#4a4a4a'    # Abu gelap untuk text sekunder
 
-    tree  = model.tree_
-    BG    = '#f8f9fa'   # latar sangat terang – sesuai Streamlit
-    # Warna per kelas
-    CC    = {0: '#e74c3c', 1: '#27ae60', 2: '#2980b9'}
-    CLS   = class_names
-    FEAT  = feature_names
-    EDGE  = '#546e7a'   # warna garis panah
-    TC    = '#1a237e'   # indigo gelap – teks utama
-    TC2   = '#37474f'   # biru abu    – teks sekunder
-
-    # --- helper: warna kotak node ---
-    def node_bg(pcts):
-        order  = np.argsort(-pcts)
-        second = order[1]
-        alpha  = min(0.18 + pcts[second] * 1.6, 0.72)
-        return CC[second], alpha
-
-    # --- layout: in-order leaf → parent centred ---
-    def layout(t):
-        ch = {}
-        q  = deque([0]); bfs = []
-        while q:
-            n = q.popleft(); bfs.append(n)
-            l, r = t.children_left[n], t.children_right[n]
-            if l == _tree.TREE_LEAF:
-                ch[n] = None
+    # ===== LAYOUT POHON =====
+    def layout_tree(tree_obj, max_depth_limit=6):
+        children_left = tree_obj.children_left
+        children_right = tree_obj.children_right
+        
+        # BFS untuk mendapatkan semua node dengan batasan depth
+        queue = deque([(0, 0)])  # (node_id, depth)
+        nodes_list = []
+        children_map = {}
+        depth_map = {}
+        
+        while queue:
+            node, depth = queue.popleft()
+            nodes_list.append(node)
+            depth_map[node] = depth
+            
+            left = children_left[node]
+            right = children_right[node]
+            
+            # Jika sudah mencapai max_depth atau node adalah leaf, stop
+            if left == _tree.TREE_LEAF or depth >= max_depth_limit:
+                children_map[node] = None
             else:
-                ch[n] = (l, r); q.append(l); q.append(r)
-
-        def leaves(n):
-            if ch[n] is None:
-                return [n]
-            return leaves(ch[n][0]) + leaves(ch[n][1])
-
-        all_l  = leaves(0)
-        leaf_x = dict(zip(all_l, np.linspace(0.06, 0.94, len(all_l))))
-
-        dep = {}
-        def sd(n, d):
-            dep[n] = d
-            if ch[n]:
-                sd(ch[n][0], d + 1)
-                sd(ch[n][1], d + 1)
-        sd(0, 0)
-
-        # Y positions per depth - dinamis untuk berbagai kedalaman pohon
-        max_d = max(dep.values())
-        Y = {d: 1.0 - d * (0.85 / max(max_d, 1)) for d in range(max_d + 1)}
-
-        def sxs(n):
-            if ch[n] is None:
-                return [leaf_x[n]]
-            return sxs(ch[n][0]) + sxs(ch[n][1])
-
-        pos = {}
-        for n in bfs:
-            pos[n] = (leaf_x[n] if ch[n] is None else np.mean(sxs(n)), Y[dep[n]])
-        return pos, ch
-
-    positions, ch_map = layout(tree)
-
-    # --- figure ---
-    fig, ax = plt.subplots(figsize=(32, 18))
+                children_map[node] = (left, right)
+                queue.append((left, depth + 1))
+                queue.append((right, depth + 1))
+        
+        # Dapatkan semua leaf nodes
+        def get_leaves(node):
+            if children_map[node] is None:
+                return [node]
+            left_leaves = get_leaves(children_map[node][0])
+            right_leaves = get_leaves(children_map[node][1])
+            return left_leaves + right_leaves
+        
+        all_leaves = get_leaves(0)
+        leaf_positions = {leaf: i for i, leaf in enumerate(all_leaves)}
+        
+        # Hitung posisi X untuk semua node
+        def get_x_positions(node):
+            if children_map[node] is None:
+                return leaf_positions[node]
+            left_x = get_x_positions(children_map[node][0])
+            right_x = get_x_positions(children_map[node][1])
+            return (left_x + right_x) / 2
+        
+        # Normalisasi posisi
+        max_depth = max(depth_map.values())
+        positions = {}
+        
+        for node in nodes_list:
+            x = get_x_positions(node) / (len(all_leaves) - 1) if len(all_leaves) > 1 else 0.5
+            y = 1 - (depth_map[node] / max_depth) * 0.8 if max_depth > 0 else 0.5
+            positions[node] = (x * 0.9 + 0.05, y * 0.85 + 0.1)
+        
+        return positions, children_map, depth_map
+    
+    positions, children_map, depth_map = layout_tree(tree, max_depth)
+    actual_max_depth = max(depth_map.values())
+    
+    # ===== UKURAN FIGURE =====
+    # Sesuaikan dengan jumlah leaf nodes dan kedalaman (max 4)
+    num_leaves = len([n for n in children_map.values() if n is None])
+    fig_width = max(20, num_leaves * 2.5)  # Lebih kecil karena depth terbatas
+    fig_height = max(12, actual_max_depth * 3.5)  # Disesuaikan dengan depth aktual
+    
+    fig, ax = plt.subplots(figsize=(fig_width, fig_height), dpi=100)
     fig.patch.set_facecolor(BG)
     ax.set_facecolor(BG)
-    ax.set_xlim(-0.03, 1.03)
-    ax.set_ylim(-0.07, 1.03)
+    ax.set_xlim(-0.05, 1.05)
+    ax.set_ylim(-0.05, 1.05)
     ax.axis('off')
 
-    BW = {True: 0.072, False: 0.095}   # half-width: daun / internal
-    BH = 0.072                          # half-height (seragam)
+    # ===== UKURAN NODE (LEBIH BESAR) =====
+    NODE_WIDTH = 0.12
+    NODE_HEIGHT = 0.10
 
-    # --- edges ---
-    for nid, kids in ch_map.items():
-        if kids is None:
+    # ===== GAMBAR EDGES =====
+    for node_id, children in children_map.items():
+        if children is None:
             continue
-        x0, y0 = positions[nid]
-        for child, lbl, dx in [(kids[0], 'Ya', -0.018), (kids[1], 'Tidak', 0.020)]:
-            x1, y1 = positions[child]
-            ax.annotate("",
-                        xy=(x1, y1 + BH + 0.005),
-                        xytext=(x0, y0 - BH - 0.005),
-                        arrowprops=dict(arrowstyle="-|>", color=EDGE, lw=2.0),
-                        zorder=1)
-            mx, my = (x0 + x1) / 2, (y0 + y1) / 2
-            ax.text(mx + dx, my + 0.013, lbl,
-                    fontsize=13, color=EDGE, fontweight='bold',
-                    ha='center', va='center', zorder=5)
+        
+        x0, y0 = positions[node_id]
+        left_child, right_child = children
+        
+        # Edge ke kiri (Ya)
+        x1, y1 = positions[left_child]
+        ax.annotate("", xy=(x1, y1 + NODE_HEIGHT/2), xytext=(x0, y0 - NODE_HEIGHT/2),
+                    arrowprops=dict(arrowstyle="-|>", color=EDGE_COLOR, lw=2.5),
+                    zorder=1)
+        
+        # Label "Ya" dengan background putih
+        mx, my = (x0 + x1) / 2, (y0 + y1) / 2
+        ax.text(mx - 0.02, my, 'Ya', fontsize=14, color=EDGE_COLOR, 
+                fontweight='bold', ha='center', va='center', 
+                bbox=dict(boxstyle='round,pad=0.3', facecolor='white', 
+                         edgecolor=EDGE_COLOR, linewidth=1),
+                zorder=5)
+        
+        # Edge ke kanan (Tidak)
+        x2, y2 = positions[right_child]
+        ax.annotate("", xy=(x2, y2 + NODE_HEIGHT/2), xytext=(x0, y0 - NODE_HEIGHT/2),
+                    arrowprops=dict(arrowstyle="-|>", color=EDGE_COLOR, lw=2.5),
+                    zorder=1)
+        
+        # Label "Tidak" dengan background putih
+        mx2, my2 = (x0 + x2) / 2, (y0 + y2) / 2
+        ax.text(mx2 + 0.02, my2, 'Tidak', fontsize=14, color=EDGE_COLOR, 
+                fontweight='bold', ha='center', va='center',
+                bbox=dict(boxstyle='round,pad=0.3', facecolor='white', 
+                         edgecolor=EDGE_COLOR, linewidth=1),
+                zorder=5)
 
-    # --- helper: label persentase berwarna inline ---
-    def draw_pcts(ax, cx, cy_row, p, fs, compact=False):
-        if compact:
-            segs = [(f"L {p[0]:.0f}%", CC[0]), ("  ", '#78909c'),
-                    (f"S {p[1]:.0f}%", CC[1]), ("  ", '#78909c'),
-                    (f"Si {p[2]:.0f}%", CC[2])]
-            cw = 0.00255
-        else:
-            segs = [(f"Lama {p[0]:.1f}%", CC[0]), ("  |  ", '#78909c'),
-                    (f"Sedang {p[1]:.1f}%", CC[1]), ("  |  ", '#78909c'),
-                    (f"Singkat {p[2]:.1f}%", CC[2])]
-            cw = 0.00265
-        full = "".join(s[0] for s in segs)
-        x_cur = cx - len(full) * cw / 2
-        for txt, clr in segs:
-            ax.text(x_cur, cy_row, txt, fontsize=fs, color=clr, fontweight='bold',
-                    ha='left', va='center', zorder=3)
-            x_cur += len(txt) * cw
-
-    # --- node boxes ---
-    for nid, (cx, cy) in positions.items():
-        pcts   = tree.value[nid][0]           # proporsi (sum = 1)
-        n_samp = tree.n_node_samples[nid]     # sampel aktual
-        maj    = int(np.argmax(pcts))
-        is_leaf = ch_map[nid] is None
-        bw     = BW[is_leaf]
-        p      = pcts * 100
-
-        fc, alpha = node_bg(pcts)
-        ec = CC[maj] if is_leaf else EDGE
-        ew = 2.8     if is_leaf else 1.8
-
+    # ===== GAMBAR NODES =====
+    for node_id, (cx, cy) in positions.items():
+        values = tree.value[node_id][0]
+        n_samples = tree.n_node_samples[node_id]
+        percentages = (values / values.sum()) * 100
+        majority_class = int(np.argmax(values))
+        is_leaf = children_map[node_id] is None
+        
+        # Warna node berdasarkan kelas mayoritas
+        node_color = NODE_COLORS[majority_class]
+        edge_color = EDGE_COLOR
+        edge_width = 3 if is_leaf else 2
+        
+        # Gambar kotak node
         box = FancyBboxPatch(
-            (cx - bw, cy - BH), 2 * bw, 2 * BH,
-            boxstyle="round,pad=0.014",
-            facecolor=fc, alpha=alpha,
-            edgecolor=ec, linewidth=ew, zorder=2
+            (cx - NODE_WIDTH/2, cy - NODE_HEIGHT/2), 
+            NODE_WIDTH, NODE_HEIGHT,
+            boxstyle="round,pad=0.02",
+            facecolor=node_color,
+            edgecolor=edge_color,
+            linewidth=edge_width,
+            zorder=2
         )
         ax.add_patch(box)
-
+        
         if not is_leaf:
-            feat   = FEAT[tree.feature[nid]]
-            thresh = tree.threshold[nid]
-            # Baris 1: kondisi split
-            ax.text(cx, cy + BH * 0.58, f"{feat} ≤ {thresh:.1f}",
-                    fontsize=13, color=TC, fontweight='bold',
+            # ===== NODE INTERNAL =====
+            feature = feature_names[tree.feature[node_id]]
+            threshold = tree.threshold[node_id]
+            
+            # Baris 1: Kondisi (FONT BESAR)
+            ax.text(cx, cy + NODE_HEIGHT * 0.32, f"{feature} ≤ {threshold:.1f}",
+                    fontsize=15, color=TEXT_MAIN, fontweight='bold',
                     ha='center', va='center', zorder=3)
-            # Baris 2: sampel
-            ax.text(cx, cy + BH * 0.18, f"Sampel = {n_samp}",
-                    fontsize=10, color=TC2, ha='center', va='center', zorder=3)
-            # Baris 3: persentase berwarna
-            draw_pcts(ax, cx, cy - BH * 0.24, p, 9.5, compact=False)
-            # Baris 4: prediksi
-            ax.text(cx, cy - BH * 0.65, f"Prediksi: {CLS[maj]}",
-                    fontsize=10.5, color=TC, fontweight='bold',
+            
+            # Baris 2: Sampel
+            ax.text(cx, cy + NODE_HEIGHT * 0.08, f"Sampel: {n_samples}",
+                    fontsize=13, color=TEXT_SEC, ha='center', va='center', zorder=3)
+            
+            # Baris 3: Distribusi kelas (lebih ringkas)
+            dist_text = f"L:{percentages[0]:.0f}% | S:{percentages[1]:.0f}% | Si:{percentages[2]:.0f}%"
+            ax.text(cx, cy - NODE_HEIGHT * 0.12, dist_text,
+                    fontsize=12, color=TEXT_SEC, ha='center', va='center', zorder=3)
+            
+            # Baris 4: Prediksi
+            ax.text(cx, cy - NODE_HEIGHT * 0.32, f"→ {class_names[majority_class]}",
+                    fontsize=14, color=TEXT_MAIN, fontweight='bold',
                     ha='center', va='center', zorder=3)
         else:
-            # Baris 1: badge HASIL
-            ax.text(cx, cy + BH * 0.62, "◆ HASIL ◆",
-                    fontsize=10.5, color=CC[maj], fontweight='bold',
+            # ===== LEAF NODE =====
+            # Baris 1: Badge HASIL
+            ax.text(cx, cy + NODE_HEIGHT * 0.32, "● HASIL ●",
+                    fontsize=14, color=TEXT_MAIN, fontweight='bold',
                     ha='center', va='center', zorder=3)
-            # Baris 2: sampel
-            ax.text(cx, cy + BH * 0.26, f"n = {n_samp}",
-                    fontsize=10, color=TC2, ha='center', va='center', zorder=3)
-            # Baris 3: persentase berwarna (kompak)
-            draw_pcts(ax, cx, cy - BH * 0.08, p, 9.5, compact=True)
-            # Baris 4: nama kelas (besar, berwarna)
-            ax.text(cx, cy - BH * 0.58, CLS[maj],
-                    fontsize=15.5, color=CC[maj], fontweight='bold',
+            
+            # Baris 2: Kelas prediksi (FONT SANGAT BESAR)
+            ax.text(cx, cy, class_names[majority_class],
+                    fontsize=18, color=TEXT_MAIN, fontweight='bold',
                     ha='center', va='center', zorder=3)
+            
+            # Baris 3: Sampel
+            ax.text(cx, cy - NODE_HEIGHT * 0.22, f"n = {n_samples}",
+                    fontsize=13, color=TEXT_SEC, ha='center', va='center', zorder=3)
+            
+            # Baris 4: Distribusi
+            dist_text = f"L:{percentages[0]:.0f}% | S:{percentages[1]:.0f}% | Si:{percentages[2]:.0f}%"
+            ax.text(cx, cy - NODE_HEIGHT * 0.38, dist_text,
+                    fontsize=11, color=TEXT_SEC, ha='center', va='center', zorder=3)
 
-    # --- judul ---
-    ax.text(0.5, 1.00, "Pohon Keputusan C4.5 + PSO (Optimasi)",
-            fontsize=24, color=TC, fontweight='bold',
+    # ===== JUDUL (FONT BESAR) =====
+    ax.text(0.5, 0.98, "Pohon Keputusan C4.5 + PSO (Optimasi)",
+            fontsize=28, color=TEXT_MAIN, fontweight='bold',
             ha='center', va='top', transform=ax.transAxes)
 
-    # --- legend ---
+    # ===== LEGEND =====
     legend_elements = [
-        Patch(facecolor=CC[0], edgecolor=CC[0], label='Lama  (>10 hari)',   linewidth=2, alpha=0.85),
-        Patch(facecolor=CC[1], edgecolor=CC[1], label='Sedang (6\u201310 hari)', linewidth=2, alpha=0.85),
-        Patch(facecolor=CC[2], edgecolor=CC[2], label='Singkat (\u22645 hari)',  linewidth=2, alpha=0.85),
+        Patch(facecolor=NODE_COLORS[0], edgecolor=EDGE_COLOR, 
+              label='Lama (>10 hari)', linewidth=2),
+        Patch(facecolor=NODE_COLORS[1], edgecolor=EDGE_COLOR, 
+              label='Sedang (6-10 hari)', linewidth=2),
+        Patch(facecolor=NODE_COLORS[2], edgecolor=EDGE_COLOR, 
+              label='Singkat (≤5 hari)', linewidth=2),
     ]
     legend = ax.legend(
-        handles=legend_elements, loc='lower right', fontsize=14,
-        facecolor='white', edgecolor='#cfd8dc', labelcolor=TC2,
-        title='Kategori Durasi', title_fontsize=15, framealpha=0.95,
-        borderpad=1.1, handlelength=2.3
+        handles=legend_elements, loc='lower right', fontsize=16,
+        facecolor='white', edgecolor=EDGE_COLOR, labelcolor=TEXT_MAIN,
+        title='Kategori Durasi', title_fontsize=18, framealpha=1.0,
+        borderpad=1.2, handlelength=2.5, shadow=True
     )
-    legend.get_title().set_color(TC)
+    legend.get_title().set_color(TEXT_MAIN)
     legend.get_title().set_fontweight('bold')
 
     plt.tight_layout()
