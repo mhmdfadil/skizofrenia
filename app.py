@@ -10,14 +10,12 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 # Scikit-learn: untuk machine learning
-# train_test_split: membagi data menjadi data latih dan uji
-# DecisionTreeClassifier & plot_tree: untuk membangun dan memvisualisasikan pohon keputusan
-# accuracy_score & classification_report: untuk evaluasi model
-# LabelEncoder: untuk mengubah variabel kategorikal menjadi numerik
 from sklearn.model_selection import train_test_split
-from sklearn.tree import DecisionTreeClassifier, plot_tree
-from sklearn.metrics import accuracy_score, classification_report
+from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor, plot_tree, export_text
+from sklearn.metrics import accuracy_score
 from sklearn.preprocessing import LabelEncoder
+from sklearn.tree import _tree
+from collections import deque
 
 # datetime.timedelta: untuk operasi tanggal dan waktu
 from datetime import timedelta
@@ -27,9 +25,6 @@ import pyswarms as ps
 
 # BytesIO: untuk menangani data biner di memori (misal untuk file download)
 from io import BytesIO
-
-# export_text: untuk mengekstrak representasi teks dari pohon keputusan
-from sklearn.tree import export_text
 
 # time: untuk operasi terkait waktu (misal delay atau pengukuran waktu)
 import time
@@ -387,19 +382,17 @@ st.markdown("""
         height: 60px;
         border-radius: 50%;
         border: 6px solid transparent;
-        border-top: 6px solid #a1c4fd;  /* biru pastel */
-        border-right: 6px solid #fbc2eb; /* pink pastel */
+        border-top: 6px solid #a1c4fd;
+        border-right: 6px solid #fbc2eb;
         animation: spin 1.2s linear infinite, glow 2s ease-in-out infinite alternate;
         box-shadow: 0 0 15px rgba(161, 196, 253, 0.5);
     }
 
-    /* Spin effect */
     @keyframes spin {
         0%   { transform: rotate(0deg); }
         100% { transform: rotate(360deg); }
     }
 
-    /* Glow soft pastel */
     @keyframes glow {
         0%   { box-shadow: 0 0 10px rgba(161, 196, 253, 0.3), 0 0 20px rgba(251, 194, 235, 0.2); }
         100% { box-shadow: 0 0 20px rgba(161, 196, 253, 0.7), 0 0 30px rgba(251, 194, 235, 0.5); }
@@ -455,68 +448,50 @@ st.markdown("""
 # JavaScript untuk animasi awan dan efek interaktif
 st.markdown("""
 <script>
-// Function to create clouds
 function createClouds() {
     const sky = document.querySelector('.sky-background');
     if (!sky) return;
-    
-    // Clear existing clouds
     sky.innerHTML = '';
-    
-    // Create multiple clouds
     for (let i = 0; i < 7; i++) {
         const cloud = document.createElement('div');
         cloud.classList.add('cloud');
-        
-        // Random size and position
         const width = Math.random() * 120 + 80;
         const height = width * 0.5;
         const top = Math.random() * 60;
         const left = -width;
         const duration = Math.random() * 40 + 40;
-        
         cloud.style.width = `${width}px`;
         cloud.style.height = `${height}px`;
         cloud.style.top = `${top}%`;
         cloud.style.left = `${left}px`;
         cloud.style.animationDuration = `${duration}s`;
         cloud.style.animationDelay = `${Math.random() * 20}s`;
-        
-        // Add some variation to cloud shape
         cloud.style.borderRadius = '50%';
-        
         sky.appendChild(cloud);
     }
 }
 
-// Add ripple effect to buttons
 function addRippleEffect() {
     const buttons = document.querySelectorAll('.stButton button');
     buttons.forEach(button => {
         button.addEventListener('click', function(e) {
             const x = e.pageX - this.offsetLeft;
             const y = e.pageY - this.offsetTop;
-            
             const ripple = document.createElement('span');
             ripple.classList.add('ripple-effect');
             ripple.style.left = `${x}px`;
             ripple.style.top = `${y}px`;
             this.appendChild(ripple);
-            
-            setTimeout(() => {
-                ripple.remove();
-            }, 600);
+            setTimeout(() => { ripple.remove(); }, 600);
         });
     });
 }
 
-// Run when page loads
 window.addEventListener('load', function() {
     createClouds();
     addRippleEffect();
 });
 
-// Recreate clouds when page changes (for Streamlit)
 document.addEventListener('DOMContentLoaded', function() {
     setTimeout(createClouds, 100);
     setTimeout(addRippleEffect, 500);
@@ -534,7 +509,6 @@ def hash_password(password):
 # Inisialisasi koneksi database
 def init_db_connection():
     try:
-        # Konfigurasi koneksi database
         conn = psycopg2.connect(
             user=os.getenv("ST_USER"),
             password=os.getenv("ST_PASSWORD"),
@@ -542,7 +516,6 @@ def init_db_connection():
             port=os.getenv("ST_PORT"),
             dbname=os.getenv("ST_DATABASE")
         )
-        
         return conn
     except Exception as e:
         st.error(f"❌ Gagal terhubung ke database: {str(e)}")
@@ -552,8 +525,6 @@ def init_db_connection():
 def create_tables(conn):
     try:
         cursor = conn.cursor()
-        
-        # Buat tabel users jika belum ada
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
@@ -563,8 +534,6 @@ def create_tables(conn):
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        
-        # Buat tabel patients jika belum ada
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS patients (
                 id SERIAL PRIMARY KEY,
@@ -576,7 +545,6 @@ def create_tables(conn):
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        
         conn.commit()
         cursor.close()
         st.info("✅ Tabel database sudah siap")
@@ -600,7 +568,6 @@ def login_user(email, password):
             conn.close()
             
             if user:
-                # Convert tuple to dictionary
                 user_dict = {
                     "id": user[0],
                     "email": user[1],
@@ -611,12 +578,10 @@ def login_user(email, password):
             else:
                 return None
         else:
-            # Fallback ke data dummy jika koneksi database gagal
             dummy_users = [
                 {"email": "admin@rsudmuyangkute.com", "password": hash_password("admin123"), "name": "Administrator"},
                 {"email": "dokter@rsudmuyangkute.com", "password": hash_password("dokter123"), "name": "Dokter Spesialis"}
             ]
-            
             for user in dummy_users:
                 if user["email"] == email and user["password"] == hashed_password:
                     return user
@@ -637,35 +602,31 @@ def show_loading_animation():
 def show_login_page():
     st.markdown("<div class='login-container'>", unsafe_allow_html=True)
     
-    # Login header
     st.markdown("<h2 class='login-title' style='color:#006;'>🔐 Masuk ke Sistem</h2>", unsafe_allow_html=True)
     st.markdown("<p class='login-subtitle'>Silakan masukkan kredensial Anda untuk mengakses sistem</p>", unsafe_allow_html=True)
 
     with st.form("login_form"):
         (col1,) = st.columns([1])
-
         with col1:
             email = st.text_input("📧 Email", placeholder="Masukkan email Anda", key="login_email")
             password = st.text_input("🔒 Password", type="password", placeholder="Masukkan password Anda", key="login_password")
-            
             submit_button = st.form_submit_button("🚀 Masuk", use_container_width=True)
 
-            # State untuk loading
             if "loading" not in st.session_state:
                 st.session_state.loading = False
 
             if submit_button:
                 if email and password:
                     st.session_state.loading = True
-                    placeholder = st.empty()  # container sementara
+                    placeholder = st.empty()
                     with placeholder:
                         show_loading_animation()
 
                     time.sleep(1.5)
                     user = login_user(email, password)
 
-                    st.session_state.loading = False  # matikan loading
-                    placeholder.empty()  # hapus loading
+                    st.session_state.loading = False
+                    placeholder.empty()
 
                     if user:
                         st.session_state.user = user
@@ -678,24 +639,28 @@ def show_login_page():
                 else:
                     st.warning("⚠️ Harap isi semua field")
 
-    # Tutup div glass
     st.markdown("</div>", unsafe_allow_html=True)
-
     st.markdown("</div>", unsafe_allow_html=True)
 
 # ===================== FUNGSI MAPE =====================
 def calculate_mape(y_true, y_pred):
     """
     Menghitung Mean Absolute Percentage Error (MAPE)
-    Rumus: (1/n) * Σ(|y_true - y_pred| / y_true) * 100%
+    Digunakan pada nilai durasi aktual (regresi) untuk mengukur
+    seberapa besar kesalahan prediksi durasi dalam persentase.
+    Rumus: (1/n) * Σ(|y_true - y_pred| / |y_true|) * 100%
+    Nilai y_true = 0 dikecualikan untuk menghindari pembagian nol.
     """
-    y_true, y_pred = np.array(y_true), np.array(y_pred)
-    # Hindari pembagian 0 dengan mengganti nilai 0 kecil (epsilon)
-    epsilon = 1e-10  
-    mape = np.mean(np.abs((y_true - y_pred) / (y_true + epsilon))) * 100
+    y_true = np.array(y_true, dtype=float)
+    y_pred = np.array(y_pred, dtype=float)
+    # Hanya hitung pada data yang durasi aktualnya bukan 0
+    mask = y_true != 0
+    if mask.sum() == 0:
+        return 0.0
+    mape = np.mean(np.abs((y_true[mask] - y_pred[mask]) / y_true[mask])) * 100
     return mape
 
-# ===================== FUNGSI PRA_PROSES DATA =====================
+# ===================== FUNGSI PRA-PROSES DATA =====================
 @st.cache_data(show_spinner="Memproses data...")
 def preprocess_data(df_raw):
     df = df_raw.copy()
@@ -711,6 +676,7 @@ def preprocess_data(df_raw):
         df['Tanggal Masuk'] = pd.to_datetime(df['Tanggal Masuk'])
         df['Tanggal Keluar'] = pd.to_datetime(df['Tanggal Keluar'])
         df['Durasi Rawat Inap (Hari)'] = (df['Tanggal Keluar'] - df['Tanggal Masuk']).dt.days
+        # Hapus baris dengan durasi negatif (data tidak valid)
         df = df[df['Durasi Rawat Inap (Hari)'] >= 0]
     else:
         st.error("❌ Kolom tanggal tidak ditemukan. Pastikan ada kolom 'Tanggal Masuk' dan 'Tanggal Keluar'.")
@@ -718,8 +684,15 @@ def preprocess_data(df_raw):
 
     # 3. Menangani Data Kosong
     df.dropna(inplace=True)
-    
-    # 4. Klasifikasi Durasi
+
+    # 4. Feature Engineering dari Tanggal
+    # Bulan dan hari-dalam-minggu dari tanggal masuk digunakan sebagai fitur
+    # untuk memprediksi kategori durasi. Ini adalah fitur yang independen dari
+    # durasi itu sendiri, sehingga model benar-benar belajar dari pola temporal.
+    df['Bulan Masuk'] = df['Tanggal Masuk'].dt.month
+    df['Hari Dalam Minggu'] = df['Tanggal Masuk'].dt.dayofweek  # 0=Senin, 6=Minggu
+
+    # 5. Klasifikasi Durasi
     def classify_duration(days):
         if days <= 5: return 'Singkat'
         elif 6 <= days <= 10: return 'Sedang'
@@ -727,46 +700,50 @@ def preprocess_data(df_raw):
     
     df['Kategori Durasi'] = df['Durasi Rawat Inap (Hari)'].apply(classify_duration)
 
-    # 5. Encoding
+    # 6. Filter Diagnosa
     if 'Diagnosa' in df.columns:
         if 'Skizofrenia' in df['Diagnosa'].unique():
             df = df[df['Diagnosa'].str.contains('Skizofrenia', case=False, na=False)]
         df.drop(columns=['Diagnosa'], inplace=True)
 
-    le = LabelEncoder()
-    df['Kategori Durasi Encoded'] = le.fit_transform(df['Kategori Durasi'])
-    
-    # Inisialisasi label_encoder di session state
+    # 7. Encoding label target
     if "label_encoder" not in st.session_state:
         st.session_state.label_encoder = LabelEncoder()
-    df['Kategori Durasi Encoded'] = st.session_state.label_encoder.fit_transform(df['Kategori Durasi'])    
+    df['Kategori Durasi Encoded'] = st.session_state.label_encoder.fit_transform(df['Kategori Durasi'])
 
     return df
 
 @st.cache_resource(show_spinner="Melatih model C4.5 dan mengoptimalkan dengan PSO...")
-def train_models(X_train, X_test, y_train, y_test):
-    # 1. Model dasar (baseline)
-    dt_base = DecisionTreeClassifier(random_state=42)
-    dt_base.fit(X_train, y_train)
-    y_pred_base = dt_base.predict(X_test)
+def train_models(X_train, X_test, y_train_clf, y_test_clf, y_train_dur, y_test_dur):
+    """
+    Melatih dua pasang model:
+    - Klasifikasi (DecisionTreeClassifier): untuk akurasi kategori.
+    - Regresi (DecisionTreeRegressor): untuk MAPE pada prediksi durasi aktual.
 
-    # 2. Hitung akurasi dasar
-    base_accuracy = accuracy_score(y_test, y_pred_base)
+    Model dasar (base) tanpa batasan depth vs model yang dioptimasi oleh PSO
+    yang mencari max_depth dan min_samples_split terbaik.
+    """
 
-    # 3. Hitung MAPE untuk model dasar
-    base_mape = calculate_mape(y_test, y_pred_base)
+    # ---- 1. Model Dasar (tanpa batasan) ----
+    dt_base_clf = DecisionTreeClassifier(random_state=42)
+    dt_base_clf.fit(X_train, y_train_clf)
+    y_pred_base_clf = dt_base_clf.predict(X_test)
+    base_accuracy = accuracy_score(y_test_clf, y_pred_base_clf)
 
-    # 4. Fungsi untuk optimasi PSO
+    dt_base_reg = DecisionTreeRegressor(random_state=42)
+    dt_base_reg.fit(X_train, y_train_dur)
+    y_pred_base_dur = dt_base_reg.predict(X_test)
+    base_mape = calculate_mape(y_test_dur, y_pred_base_dur)
+
+    # ---- 2. Fungsi Objective PSO ----
+    # PSO mencari kombinasi (max_depth, min_samples_split) yang
+    # menghasilkan akurasi klasifikasi tertinggi.
     def f_objective(params):
         n_particles = params.shape[0]
         fitness = []
         for i in range(n_particles):
-            max_depth = int(params[i, 0])          # Parameter 1: max_depth
-            min_samples = int(params[i, 1])        # Parameter 2: min_samples_split
-            
-            # Batasan nilai parameter
-            max_depth = max(1, min(max_depth, 20))  # Pastikan 1 <= max_depth <= 20
-            min_samples = max(2, min(min_samples, 10))  # Pastikan 2 <= min_samples <= 10
+            max_depth = max(1, min(int(params[i, 0]), 20))
+            min_samples = max(2, min(int(params[i, 1]), 10))
 
             model = DecisionTreeClassifier(
                 max_depth=max_depth,
@@ -774,78 +751,275 @@ def train_models(X_train, X_test, y_train, y_test):
                 criterion='entropy',
                 random_state=42
             )
-            model.fit(X_train, y_train)
+            model.fit(X_train, y_train_clf)
             y_pred = model.predict(X_test)
-            accuracy = accuracy_score(y_test, y_pred)
+            accuracy = accuracy_score(y_test_clf, y_pred)
             fitness.append(-accuracy)  # Minimalkan negatif akurasi
-        
         return np.array(fitness)
-    
-    # 5. Konfigurasi PSO
-    bounds = (np.array([1, 2]), np.array([20, 10]))  # Batasan parameter
+
+    # ---- 3. Konfigurasi dan Jalankan PSO ----
+    bounds = (np.array([1, 2]), np.array([20, 10]))
     options = {'c1': 0.5, 'c2': 0.3, 'w': 0.9}
     optimizer = ps.single.GlobalBestPSO(n_particles=10, dimensions=2, options=options, bounds=bounds)
-
-    # 6. Jalankan optimasi
     cost, pos = optimizer.optimize(f_objective, iters=50, verbose=False)
 
-    # 7. Tetapkan nilai optimal
-    best_max_depth = int(pos[0])        # Parameter optimal 1
-    best_min_samples = int(pos[1])      # Parameter optimal 2
+    best_max_depth = max(1, min(int(pos[0]), 20))
+    best_min_samples = max(2, min(int(pos[1]), 10))
 
-    # 8. Bangun Model dengan Parameter Optimal
-    dt_optimized = DecisionTreeClassifier(
+    # ---- 4. Model Optimasi dengan parameter PSO ----
+    dt_opt_clf = DecisionTreeClassifier(
         max_depth=best_max_depth,
         min_samples_split=best_min_samples,
         criterion='entropy',
         random_state=42
     )
-    dt_optimized.fit(X_train, y_train)
-    y_pred_optim = dt_optimized.predict(X_test)
+    dt_opt_clf.fit(X_train, y_train_clf)
+    y_pred_opt_clf = dt_opt_clf.predict(X_test)
+    optim_accuracy = accuracy_score(y_test_clf, y_pred_opt_clf)
 
-    # 9. Hitung akurasi model optimasi
-    optim_accuracy = accuracy_score(y_test, y_pred_optim)
+    dt_opt_reg = DecisionTreeRegressor(
+        max_depth=best_max_depth,
+        min_samples_split=best_min_samples,
+        random_state=42
+    )
+    dt_opt_reg.fit(X_train, y_train_dur)
+    y_pred_opt_dur = dt_opt_reg.predict(X_test)
+    optim_mape = calculate_mape(y_test_dur, y_pred_opt_dur)
 
-    # 10. Hitung MAPE untuk model optimasi
-    optim_mape = calculate_mape(y_test, y_pred_optim)
-
-    # 11. Kembalikan hasil
     return {
-        "base_model": dt_base,
+        "base_model": dt_base_clf,
         "base_accuracy": base_accuracy,
         "base_mape": base_mape,
-        "optimized_model": dt_optimized,
+        "optimized_model": dt_opt_clf,
         "optim_accuracy": optim_accuracy,
         "optim_mape": optim_mape,
-        "y_test": y_test,
-        "y_pred_base": y_pred_base,
-        "y_pred_optim": y_pred_optim,
+        "y_test_clf": y_test_clf,
+        "y_pred_base_clf": y_pred_base_clf,
+        "y_pred_opt_clf": y_pred_opt_clf,
+        "y_test_dur": y_test_dur,
+        "y_pred_base_dur": y_pred_base_dur,
+        "y_pred_opt_dur": y_pred_opt_dur,
         "best_params": {
             "max_depth": best_max_depth,
             "min_samples": best_min_samples
         }
     }
 
+# ===================== FUNGSI VISUALISASI POHON KEPUTUSAN (DARK THEME) =====================
+def plot_decision_tree_dark(model, feature_names, class_names):
+    """
+    Menggambar pohon keputusan dengan latar terang (cocok untuk st.pyplot)
+    dan warna yang bervariasi antar node.
+
+    Teknik pewarnaan: karena semua node pada dataset ini didominasi kelas
+    'Sedang', pewarnaan berdasarkan majority class menghasilkan pohon
+    monokrom. Solusi: warnai setiap kotak node dengan warna kelas KEDUA
+    tertinggi (minority terbesar), sehingga perbedaan distribusi antar
+    node terlihat secara visual.
+
+    Layout: daun ditata merata dari kiri ke kanan (in-order traversal),
+    node internal diposisikan di tengah antara daun-daun anak-cucu mereka.
+    """
+    from matplotlib.patches import FancyBboxPatch, Patch
+
+    tree  = model.tree_
+    BG    = '#f8f9fa'   # latar sangat terang – sesuai Streamlit
+    # Warna per kelas
+    CC    = {0: '#e74c3c', 1: '#27ae60', 2: '#2980b9'}
+    CLS   = class_names
+    FEAT  = feature_names
+    EDGE  = '#546e7a'   # warna garis panah
+    TC    = '#1a237e'   # indigo gelap – teks utama
+    TC2   = '#37474f'   # biru abu    – teks sekunder
+
+    # --- helper: warna kotak node ---
+    def node_bg(pcts):
+        order  = np.argsort(-pcts)
+        second = order[1]
+        alpha  = min(0.18 + pcts[second] * 1.6, 0.72)
+        return CC[second], alpha
+
+    # --- layout: in-order leaf → parent centred ---
+    def layout(t):
+        ch = {}
+        q  = deque([0]); bfs = []
+        while q:
+            n = q.popleft(); bfs.append(n)
+            l, r = t.children_left[n], t.children_right[n]
+            if l == _tree.TREE_LEAF:
+                ch[n] = None
+            else:
+                ch[n] = (l, r); q.append(l); q.append(r)
+
+        def leaves(n):
+            if ch[n] is None:
+                return [n]
+            return leaves(ch[n][0]) + leaves(ch[n][1])
+
+        all_l  = leaves(0)
+        leaf_x = dict(zip(all_l, np.linspace(0.06, 0.94, len(all_l))))
+
+        dep = {}
+        def sd(n, d):
+            dep[n] = d
+            if ch[n]:
+                sd(ch[n][0], d + 1)
+                sd(ch[n][1], d + 1)
+        sd(0, 0)
+
+        # Y positions per depth - dinamis untuk berbagai kedalaman pohon
+        max_d = max(dep.values())
+        Y = {d: 1.0 - d * (0.85 / max(max_d, 1)) for d in range(max_d + 1)}
+
+        def sxs(n):
+            if ch[n] is None:
+                return [leaf_x[n]]
+            return sxs(ch[n][0]) + sxs(ch[n][1])
+
+        pos = {}
+        for n in bfs:
+            pos[n] = (leaf_x[n] if ch[n] is None else np.mean(sxs(n)), Y[dep[n]])
+        return pos, ch
+
+    positions, ch_map = layout(tree)
+
+    # --- figure ---
+    fig, ax = plt.subplots(figsize=(32, 18))
+    fig.patch.set_facecolor(BG)
+    ax.set_facecolor(BG)
+    ax.set_xlim(-0.03, 1.03)
+    ax.set_ylim(-0.07, 1.03)
+    ax.axis('off')
+
+    BW = {True: 0.072, False: 0.095}   # half-width: daun / internal
+    BH = 0.072                          # half-height (seragam)
+
+    # --- edges ---
+    for nid, kids in ch_map.items():
+        if kids is None:
+            continue
+        x0, y0 = positions[nid]
+        for child, lbl, dx in [(kids[0], 'Ya', -0.018), (kids[1], 'Tidak', 0.020)]:
+            x1, y1 = positions[child]
+            ax.annotate("",
+                        xy=(x1, y1 + BH + 0.005),
+                        xytext=(x0, y0 - BH - 0.005),
+                        arrowprops=dict(arrowstyle="-|>", color=EDGE, lw=2.0),
+                        zorder=1)
+            mx, my = (x0 + x1) / 2, (y0 + y1) / 2
+            ax.text(mx + dx, my + 0.013, lbl,
+                    fontsize=13, color=EDGE, fontweight='bold',
+                    ha='center', va='center', zorder=5)
+
+    # --- helper: label persentase berwarna inline ---
+    def draw_pcts(ax, cx, cy_row, p, fs, compact=False):
+        if compact:
+            segs = [(f"L {p[0]:.0f}%", CC[0]), ("  ", '#78909c'),
+                    (f"S {p[1]:.0f}%", CC[1]), ("  ", '#78909c'),
+                    (f"Si {p[2]:.0f}%", CC[2])]
+            cw = 0.00255
+        else:
+            segs = [(f"Lama {p[0]:.1f}%", CC[0]), ("  |  ", '#78909c'),
+                    (f"Sedang {p[1]:.1f}%", CC[1]), ("  |  ", '#78909c'),
+                    (f"Singkat {p[2]:.1f}%", CC[2])]
+            cw = 0.00265
+        full = "".join(s[0] for s in segs)
+        x_cur = cx - len(full) * cw / 2
+        for txt, clr in segs:
+            ax.text(x_cur, cy_row, txt, fontsize=fs, color=clr, fontweight='bold',
+                    ha='left', va='center', zorder=3)
+            x_cur += len(txt) * cw
+
+    # --- node boxes ---
+    for nid, (cx, cy) in positions.items():
+        pcts   = tree.value[nid][0]           # proporsi (sum = 1)
+        n_samp = tree.n_node_samples[nid]     # sampel aktual
+        maj    = int(np.argmax(pcts))
+        is_leaf = ch_map[nid] is None
+        bw     = BW[is_leaf]
+        p      = pcts * 100
+
+        fc, alpha = node_bg(pcts)
+        ec = CC[maj] if is_leaf else EDGE
+        ew = 2.8     if is_leaf else 1.8
+
+        box = FancyBboxPatch(
+            (cx - bw, cy - BH), 2 * bw, 2 * BH,
+            boxstyle="round,pad=0.014",
+            facecolor=fc, alpha=alpha,
+            edgecolor=ec, linewidth=ew, zorder=2
+        )
+        ax.add_patch(box)
+
+        if not is_leaf:
+            feat   = FEAT[tree.feature[nid]]
+            thresh = tree.threshold[nid]
+            # Baris 1: kondisi split
+            ax.text(cx, cy + BH * 0.58, f"{feat} ≤ {thresh:.1f}",
+                    fontsize=13, color=TC, fontweight='bold',
+                    ha='center', va='center', zorder=3)
+            # Baris 2: sampel
+            ax.text(cx, cy + BH * 0.18, f"Sampel = {n_samp}",
+                    fontsize=10, color=TC2, ha='center', va='center', zorder=3)
+            # Baris 3: persentase berwarna
+            draw_pcts(ax, cx, cy - BH * 0.24, p, 9.5, compact=False)
+            # Baris 4: prediksi
+            ax.text(cx, cy - BH * 0.65, f"Prediksi: {CLS[maj]}",
+                    fontsize=10.5, color=TC, fontweight='bold',
+                    ha='center', va='center', zorder=3)
+        else:
+            # Baris 1: badge HASIL
+            ax.text(cx, cy + BH * 0.62, "◆ HASIL ◆",
+                    fontsize=10.5, color=CC[maj], fontweight='bold',
+                    ha='center', va='center', zorder=3)
+            # Baris 2: sampel
+            ax.text(cx, cy + BH * 0.26, f"n = {n_samp}",
+                    fontsize=10, color=TC2, ha='center', va='center', zorder=3)
+            # Baris 3: persentase berwarna (kompak)
+            draw_pcts(ax, cx, cy - BH * 0.08, p, 9.5, compact=True)
+            # Baris 4: nama kelas (besar, berwarna)
+            ax.text(cx, cy - BH * 0.58, CLS[maj],
+                    fontsize=15.5, color=CC[maj], fontweight='bold',
+                    ha='center', va='center', zorder=3)
+
+    # --- judul ---
+    ax.text(0.5, 1.00, "Pohon Keputusan C4.5 + PSO (Optimasi)",
+            fontsize=24, color=TC, fontweight='bold',
+            ha='center', va='top', transform=ax.transAxes)
+
+    # --- legend ---
+    legend_elements = [
+        Patch(facecolor=CC[0], edgecolor=CC[0], label='Lama  (>10 hari)',   linewidth=2, alpha=0.85),
+        Patch(facecolor=CC[1], edgecolor=CC[1], label='Sedang (6\u201310 hari)', linewidth=2, alpha=0.85),
+        Patch(facecolor=CC[2], edgecolor=CC[2], label='Singkat (\u22645 hari)',  linewidth=2, alpha=0.85),
+    ]
+    legend = ax.legend(
+        handles=legend_elements, loc='lower right', fontsize=14,
+        facecolor='white', edgecolor='#cfd8dc', labelcolor=TC2,
+        title='Kategori Durasi', title_fontsize=15, framealpha=0.95,
+        borderpad=1.1, handlelength=2.3
+    )
+    legend.get_title().set_color(TC)
+    legend.get_title().set_fontweight('bold')
+
+    plt.tight_layout()
+    return fig
+
 # Fungsi untuk halaman dashboard
 def show_dashboard():
     # Dashboard styling
     st.markdown("""
     <style>
-        /* Global Styles */
         html, body, [class*="css"] {
             background: transparent !important;
         }
-        
         .main {
             background: linear-gradient(120deg, #a1c4fd 0%, #c2e9fb 50%, #fbc2eb 100%) !important;
             padding: 0;
         }
-        
         .stApp {
             background: linear-gradient(120deg, #a1c4fd 0%, #c2e9fb 50%, #fbc2eb 100%) !important;
         }
-        
-        /* Header Styles */
         .main-header {
             background: rgba(255, 255, 255, 0.2);
             backdrop-filter: blur(10px);
@@ -857,21 +1031,17 @@ def show_dashboard():
             text-align: center;
             border: 1px solid rgba(255, 255, 255, 0.3);
         }
-        
         .main-title {
             font-size: 2.8rem;
             font-weight: 700;
             margin-bottom: 0.5rem;
             color: #2b5876;
         }
-        
         .main-subtitle {
             font-size: 1.2rem;
             color: #4b86b4;
             margin-bottom: 1rem;
         }
-        
-        /* Card Styles */
         .custom-card {
             background: rgba(255, 255, 255, 0.8);
             backdrop-filter: blur(10px);
@@ -882,13 +1052,10 @@ def show_dashboard():
             margin-bottom: 1.5rem;
             transition: transform 0.3s ease, box-shadow 0.3s ease;
         }
-        
         .custom-card:hover {
             transform: translateY(-5px);
             box-shadow: 0 12px 40px rgba(31, 38, 135, 0.2);
         }
-        
-        /* Button Styles */
         .stButton>button {
             background: linear-gradient(90deg, #a1c4fd 0%, #c2e9fb 100%);
             color: #2b5876;
@@ -899,50 +1066,41 @@ def show_dashboard():
             transition: all 0.3s ease;
             box-shadow: 0 4px 15px rgba(161, 196, 253, 0.3);
         }
-        
         .stButton>button:hover {
             background: linear-gradient(90deg, #c2e9fb 0%, #fbc2eb 100%);
             transform: scale(1.05);
             box-shadow: 0 6px 20px rgba(194, 233, 251, 0.4);
             color: #2b5876;
         }
-        
-        /* Sidebar Styles */
         [data-testid="stSidebar"] {
             background: rgba(255, 255, 255, 0.2) !important;
             backdrop-filter: blur(10px);
             width:290px;
             border-right: 1px solid rgba(255, 255, 255, 0.3);
         }
-        
         [data-testid="stSidebar"] .stButton>button {
             background: linear-gradient(90deg, #a1c4fd 0%, #c2e9fb 100%);
             width: 100%;
             color: #2b5876;
         }
-        
         [data-testid="stSidebar"] .stButton>button:hover {
             background: linear-gradient(90deg, #c2e9fb 0%, #fbc2eb 100%);
             color: #2b5876;
         }
-        
         [data-testid="stSidebar"] .stExpander {
             background: rgba(255, 255, 255, 0.3);
             border-radius: 10px;
             border: 1px solid rgba(255, 255, 255, 0.3);
         }
-        
         [data-testid="stSidebar"] .streamlit-expanderHeader {
             color: #2b5876;
             font-weight: 600;
         }
-        
         [data-testid="stSidebar"] .stMarkdown p, 
         [data-testid="stSidebar"] .stMarkdown li,
         [data-testid="stSidebar"] .stText {
             color: #2b5876 !important;
         }
-        
         .sidebar-title {
             font-size: 1.5rem;
             font-weight: 600;
@@ -950,12 +1108,9 @@ def show_dashboard():
             text-align: center;
             color: #2b5876;
         }
-        
-        /* Tab Styles */
         .stTabs [data-baseweb="tab-list"] {
             gap: 8px;
         }
-        
         .stTabs [data-baseweb="tab"] {
             background: rgba(255, 255, 255, 0.5);
             border-radius: 10px 10px 0 0;
@@ -964,13 +1119,10 @@ def show_dashboard():
             transition: all 0.3s ease;
             color: #2b5876;
         }
-        
         .stTabs [aria-selected="true"] {
             background: linear-gradient(90deg, #a1c4fd 0%, #c2e9fb 100%);
             color: #2b5876;
         }
-        
-        /* Metric Cards */
         .metric-card {
             background: rgba(255, 255, 255, 0.7);
             backdrop-filter: blur(5px);
@@ -981,51 +1133,38 @@ def show_dashboard():
             box-shadow: 0 8px 20px rgba(161, 196, 253, 0.3);
             border: 1px solid rgba(255, 255, 255, 0.5);
         }
-        
         .metric-title {
             font-size: 1rem;
             font-weight: 500;
             margin-bottom: 0.5rem;
             color: #4b86b4;
         }
-        
         .metric-value {
             font-size: 2rem;
             font-weight: 700;
             color: #2b5876;
         }
-        
-        /* Animation Keyframes */
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(20px); }
             to { opacity: 1; transform: translateY(0); }
         }
-        
         .fade-in {
             animation: fadeIn 1s ease forwards;
         }
-        
-        /* Progress Bar */
         .stProgress > div > div > div > div {
             background: linear-gradient(90deg, #a1c4fd 0%, #c2e9fb 100%);
         }
-        
-        /* File Uploader */
         .stFileUploader > div > div {
             border: 2px dashed #a1c4fd;
             border-radius: 10px;
             background: rgba(255, 255, 255, 0.5);
         }
-        
-        /* Expander */
         .streamlit-expanderHeader {
             background: rgba(255, 255, 255, 0.3);
             border-radius: 10px;
             font-weight: 600;
             color: #2b5876;
         }
-        
-        /* Upload Success Message */
         .upload-success {
             background: rgba(46, 204, 113, 0.2);
             border: 1px solid #2ecc71;
@@ -1035,8 +1174,6 @@ def show_dashboard():
             color: #27ae60;
             text-align: center;
         }
-        
-        /* Download Link */
         .download-link {
             display: inline-block;
             background: linear-gradient(90deg, #a1c4fd 0%, #c2e9fb 100%);
@@ -1049,7 +1186,6 @@ def show_dashboard():
             font-weight: 500;
             transition: all 0.3s ease;
         }
-        
         .download-link:hover {
             background: linear-gradient(90deg, #c2e9fb 0%, #fbc2eb 100%);
             color: #2b5876;
@@ -1059,8 +1195,6 @@ def show_dashboard():
     """, unsafe_allow_html=True)
 
     # ===================== JUDUL & HEADER =====================
-  
-    
     st.markdown("""
     <div class="main-header fade-in">
         <h1 class="main-title">🏥 Klasifikasi Durasi Rawat Inap Pasien Skizofrenia</h1>
@@ -1085,39 +1219,32 @@ def show_dashboard():
         {st.session_state.user['name']} <br>
         {st.session_state.user['email']}
         """, unsafe_allow_html=True)
-        
 
-        # Inisialisasi state
         if "show_logout_confirm" not in st.session_state:
             st.session_state.show_logout_confirm = False
         if "logged_out" not in st.session_state:
             st.session_state.logged_out = False
 
-        # Tombol utama Logout
         with st.container():
             if st.button("🚪 Keluar", use_container_width=True):
                 st.session_state.show_logout_confirm = True
 
-        # Jika user klik keluar → tampilkan konfirmasi
         if st.session_state.show_logout_confirm:
             st.warning("Apakah Anda yakin ingin keluar dari sistem?")
-
             col1, col2 = st.columns(2)
             with col1:
-                if st.button("✅ Ya",  use_container_width=True):
-                    st.session_state.clear()   # clear semua state
-                    st.session_state.logged_out = True  # tandai sudah logout
-                    st.session_state.show_logout_confirm = False  # sembunyikan konfirmasi
-
+                if st.button("✅ Ya", use_container_width=True):
+                    st.session_state.clear()
+                    st.session_state.logged_out = True
+                    st.session_state.show_logout_confirm = False
             with col2:
-                if st.button("❌ Batal",  use_container_width=True):
-                    st.session_state.show_logout_confirm = False  # sembunyikan konfirmasi
+                if st.button("❌ Batal", use_container_width=True):
+                    st.session_state.show_logout_confirm = False
 
-        # Tampilkan pesan sukses kalau logout
         if st.session_state.logged_out:
             st.success("Anda telah logout")
             time.sleep(1)
-            st.session_state.logged_out = False  # reset agar tidak muncul lagi
+            st.session_state.logged_out = False
             st.rerun()
 
         st.markdown("---")
@@ -1128,7 +1255,6 @@ def show_dashboard():
             help="File harus mengandung kolom: Tanggal Masuk, Tanggal Keluar"
         )
         
-        # Tampilkan status file yang diunggah
         if uploaded_file is not None:
             st.markdown(f"""
             <div class="upload-success">
@@ -1148,7 +1274,6 @@ def show_dashboard():
             4. Gunakan fitur prediksi untuk kasus baru
             """)
             
-            # Link download template
             st.markdown("""
             <div style="margin-top: 0.2rem;">
                 <p style="margin-bottom: 0.5rem; font-weight: bold;">📥 Template Dataset:</p>
@@ -1192,36 +1317,46 @@ def show_dashboard():
                     progress_bar.progress(i + 1)
                 
                 df_raw = pd.read_excel(uploaded_file)
-                
                 df_processed = preprocess_data(df_raw)
             
-            # Verifikasi kolom
-            required_cols = ['Durasi Rawat Inap (Hari)', 'Kategori Durasi Encoded']
+            # Verifikasi kolom yang dibutuhkan
+            required_cols = ['Durasi Rawat Inap (Hari)', 'Kategori Durasi Encoded', 'Bulan Masuk', 'Hari Dalam Minggu']
             if not all(col in df_processed.columns for col in required_cols):
                 st.error("❌ Format data tidak valid. Pastikan file memiliki kolom yang dibutuhkan.")
                 st.stop()
                 
-            # Siapkan data training
-            X = df_processed[['Durasi Rawat Inap (Hari)']]
-            y = df_processed['Kategori Durasi Encoded']
-            
             if len(df_processed) < 2:
                 st.error("⚠ Data terlalu sedikit. Minimal diperlukan 2 sampel.")
                 st.stop()
-                
-            if y.nunique() < 2:
+
+            y_class = df_processed['Kategori Durasi Encoded']
+            if y_class.nunique() < 2:
                 st.warning("⚠ Hanya ada 1 kategori durasi. Tidak bisa dilakukan klasifikasi.")
                 st.stop()
-                
-            X_train, X_test, y_train, y_test = train_test_split(
-                X, y, 
-                test_size=0.2, 
-                random_state=42, 
-                stratify=y
+
+            # Fitur: Bulan Masuk dan Hari Dalam Minggu
+            # Ini adalah fitur yang independen dari durasi, sehingga model
+            # benar-benar belajar pola temporal (bukan sekadar membalik rumus klasifikasi).
+            X = df_processed[['Bulan Masuk', 'Hari Dalam Minggu']]
+            y_clf = df_processed['Kategori Durasi Encoded']
+            y_dur = df_processed['Durasi Rawat Inap (Hari)']  # untuk MAPE (regresi)
+
+            # Split data dengan stratifikasi pada label klasifikasi
+            X_train, X_test, y_clf_train, y_clf_test = train_test_split(
+                X, y_clf, test_size=0.2, random_state=42, stratify=y_clf
             )
+            # Gunakan index dari split di atas untuk durasi —
+            # train_test_split kedua akan mengacak ulang baris sehingga
+            # y_dur tidak selaras lagi dengan X. .loc menjamin keselarasan.
+            y_dur_train = y_dur.loc[X_train.index]
+            y_dur_test  = y_dur.loc[X_test.index]
             
             with st.spinner("🧠 Melatih model dengan algoritma C4.5 dan PSO..."):
-                model_results = train_models(X_train, X_test, y_train, y_test)
+                model_results = train_models(
+                    X_train, X_test,
+                    y_clf_train, y_clf_test,
+                    y_dur_train, y_dur_test
+                )
             
             # ===================== TABBED INTERFACE =====================
             tab1, tab2, tab3, tab4, tab5 = st.tabs([
@@ -1232,6 +1367,7 @@ def show_dashboard():
                 "🏥 Estimasi Ruangan"
             ])
             
+            # ========== TAB 1: IKHTISAR DATA ==========
             with tab1:
                 col1, col2 = st.columns([2, 1])
                 
@@ -1308,8 +1444,9 @@ def show_dashboard():
                     
                 st.markdown('</div>', unsafe_allow_html=True)
             
+            # ========== TAB 2: PERBANDINGAN MODEL ==========
             with tab2:
-                st.markdown('<div class="custom-card"><h3>⚙️ Parameter Model Optimal</h3>', unsafe_allow_html=True)
+                st.markdown('<div class="custom-card"><h3>⚙️ Parameter Model Optimal (hasil PSO)</h3>', unsafe_allow_html=True)
                 col8, col9 = st.columns(2)
                 
                 with col8:
@@ -1329,139 +1466,115 @@ def show_dashboard():
                     """, unsafe_allow_html=True)
                 st.markdown('</div>', unsafe_allow_html=True)
                 
+                # Kartu Akurasi & MAPE: Base vs Optimasi
                 col10, col11 = st.columns(2)
                 
                 with col10:
                     st.markdown('<div class="custom-card"><h3>📊 Model C4.5 Dasar</h3>', unsafe_allow_html=True)
-                    st.metric("Akurasi", f"{model_results['base_accuracy']:.2%}", delta=None)
-                    st.metric("MAPE", f"{model_results['base_mape']:.2f}%", delta=None)
-                    
-                    # Visualisasi akurasi
-                    fig_base = go.Figure(go.Indicator(
-                        mode = "gauge+number+delta",
-                        value = model_results['base_accuracy'] * 100,
-                        domain = {'x': [0, 1], 'y': [0, 1]},
-                        title = {'text': "Akurasi Model Dasar (%)"},
-                        gauge = {
-                            'axis': {'range': [0, 100]},
-                            'bar': {'color': "#a1c4fd"},
-                            'steps': [
-                                {'range': [0, 70], 'color': "rgba(255, 255, 255, 0.3)"},
-                                {'range': [70, 90], 'color': "rgba(194, 233, 251, 0.5)"},
-                                {'range': [90, 100], 'color': "rgba(161, 196, 253, 0.7)"}
-                            ],
-                        }
-                    ))
-                    fig_base.update_layout(height=300, paper_bgcolor='rgba(0,0,0,0)')
-                    st.plotly_chart(fig_base, use_container_width=True)
-                    st.markdown('</div>', unsafe_allow_html=True)
+                    st.metric("MAPE Prediksi Durasi", f"{model_results['base_mape']:.2f}%")
                     
                 with col11:
-                    st.markdown('<div class="custom-card"><h3>🚀 Model C4.5+PSO</h3>', unsafe_allow_html=True)
-                    improvement = model_results['optim_accuracy'] - model_results['base_accuracy']
-                    st.metric("Akurasi", f"{model_results['optim_accuracy']:.2%}", 
-                             delta=f"{improvement:.2%}" if improvement > 0 else None)
-                    st.metric("MAPE", f"{model_results['optim_mape']:.2f}%", 
-                             delta=f"{- (model_results['optim_mape'] - model_results['base_mape']):.2f}%" 
-                             if model_results['optim_mape'] < model_results['base_mape'] else None)
-                    
-                    # Visualisasi akurasi
-                    fig_optim = go.Figure(go.Indicator(
-                        mode = "gauge+number+delta",
-                        value = model_results['optim_accuracy'] * 100,
-                        domain = {'x': [0, 1], 'y': [0, 1]},
-                        title = {'text': "Akurasi Model Optimasi (%)"},
-                        gauge = {
-                            'axis': {'range': [0, 100]},
-                            'bar': {'color': "#fbc2eb"},
-                            'steps': [
-                                {'range': [0, 70], 'color': "rgba(255, 255, 255, 0.3)"},
-                                {'range': [70, 90], 'color': "rgba(194, 233, 251, 0.5)"},
-                                {'range': [90, 100], 'color': "rgba(251, 194, 235, 0.7)"}
-                            ],
-                        }
-                    ))
-                    fig_optim.update_layout(height=300, paper_bgcolor='rgba(0,0,0,0)')
-                    st.plotly_chart(fig_optim, use_container_width=True)
-                    st.markdown('</div>', unsafe_allow_html=True)
-                
-                # Laporan klasifikasi
-                st.markdown('<div class="custom-card"><h3>📋 Laporan Klasifikasi</h3>', unsafe_allow_html=True)
-                col12, col13 = st.columns(2)
-                
-                with col12:
-                    st.markdown("**Model Dasar**")
-                    st.code(
-                        classification_report(
-                            model_results['y_test'], 
-                            model_results['y_pred_base'],
-                            target_names=['Singkat', 'Sedang', 'Lama']
-                        )
+                    st.markdown('<div class="custom-card"><h3>🚀 Model C4.5 + PSO</h3>', unsafe_allow_html=True)
+                    acc_improvement = model_results['optim_accuracy'] - model_results['base_accuracy']
+                    mape_improvement = model_results['base_mape'] - model_results['optim_mape']  # positif = lebih baik
+
+                    st.metric(
+                        "MAPE Prediksi Durasi",
+                        f"{model_results['optim_mape']:.2f}%",
+                        delta=f"-{mape_improvement:.2f}%" if mape_improvement > 0 else f"+{-mape_improvement:.2f}%",
+                        help="Nilai lebih kecil = lebih baik"
                     )
-                    
-                with col13:
-                    st.markdown("**Model Optimasi**")
-                    st.code(
-                        classification_report(
-                            model_results['y_test'], 
-                            model_results['y_pred_optim'],
-                            target_names=['Singkat', 'Sedang', 'Lama']
-                        )
-                    )
+
+
+                # Visualisasi perbandingan MAPE (bar chart)
+                st.markdown('<div class="custom-card"><h3>📉 Perbandingan MAPE: C4.5 vs C4.5+PSO</h3>', unsafe_allow_html=True)
+                mape_data = pd.DataFrame({
+                    'Model': ['C4.5 Dasar', 'C4.5 + PSO'],
+                    'MAPE (%)': [model_results['base_mape'], model_results['optim_mape']]
+                })
+                fig_mape = px.bar(
+                    mape_data,
+                    x='Model',
+                    y='MAPE (%)',
+                    color='Model',
+                    color_discrete_sequence=['#a1c4fd', '#fbc2eb'],
+                    text='MAPE (%)',
+                    height=300
+                )
+                fig_mape.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
+                fig_mape.update_layout(
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    yaxis_title='MAPE (%)',
+                    showlegend=False
+                )
+                st.plotly_chart(fig_mape, use_container_width=True)
+                st.markdown("""
+                <p style="color: #5d707f; font-size: 0.9rem; margin-top: 0.5rem;">
+                    <strong>Catatan:</strong> MAPE dihitung dari prediksi durasi rawat inap (hari) menggunakan 
+                    regresi pohon keputusan. Nilai MAPE yang lebih kecil menunjukkan prediksi yang lebih akurat. 
+                    PSO mengoptimasi parameter pohon sehingga model lebih tergeneralisasi dan mengurangi overfitting.
+                </p>
+                """, unsafe_allow_html=True)
                 st.markdown('</div>', unsafe_allow_html=True)
                 
                 # Download hasil prediksi
-                output_df = X_test.copy()
+                st.markdown('<div class="custom-card"><h3>📥 Unduh Hasil</h3>', unsafe_allow_html=True)
                 if "label_encoder" in st.session_state:
-                    output_df['Aktual'] = st.session_state['label_encoder'].inverse_transform(model_results['y_test'])
-                    output_df['Prediksi (Dasar)'] = st.session_state['label_encoder'].inverse_transform(model_results['y_pred_base'])
-                    output_df['Prediksi (Optimasi)'] = st.session_state['label_encoder'].inverse_transform(model_results['y_pred_optim'])
+                    output_df = pd.DataFrame({
+                        'Bulan Masuk': X_test['Bulan Masuk'].values,
+                        'Hari Dalam Minggu': X_test['Hari Dalam Minggu'].values,
+                        'Durasi Aktual (Hari)': model_results['y_test_dur'].values,
+                        'Kategori Aktual': st.session_state['label_encoder'].inverse_transform(model_results['y_test_clf']),
+                        'Prediksi Kategori (Dasar)': st.session_state['label_encoder'].inverse_transform(model_results['y_pred_base_clf']),
+                        'Prediksi Kategori (Optimasi)': st.session_state['label_encoder'].inverse_transform(model_results['y_pred_opt_clf']),
+                        'Prediksi Durasi (Dasar)': np.round(model_results['y_pred_base_dur'], 1),
+                        'Prediksi Durasi (Optimasi)': np.round(model_results['y_pred_opt_dur'], 1),
+                    })
+
+                    excel_buffer = BytesIO()
+                    output_df.to_excel(excel_buffer, index=False)
+
+                    st.download_button(
+                        label="📥 Unduh Hasil Prediksi (Excel)",
+                        data=excel_buffer,
+                        file_name="prediksi.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
                 else:
                     st.error("Label encoder belum diinisialisasi.")
-                    st.stop()
-                
-                excel_buffer = BytesIO()
-                output_df.to_excel(excel_buffer, index=False)
-                
-                st.markdown('<div class="custom-card">', unsafe_allow_html=True)
-                st.download_button(
-                    label="📥 Unduh Hasil Prediksi (Excel)",
-                    data=excel_buffer,
-                    file_name="prediksi.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
                 st.markdown('</div>', unsafe_allow_html=True)
             
+            # ========== TAB 3: POHON KEPUTUSAN ==========
             with tab3:
                 st.markdown('<div class="custom-card"><h3>🌳 Visualisasi Pohon Keputusan</h3>', unsafe_allow_html=True)
                 
                 with st.expander("ℹ️ Tentang visualisasi ini"):
                     st.write("""
-                    Pohon ini menunjukkan proses pengambilan keputusan model C4.5 yang dioptimasi.
-                    Setiap node menunjukkan kondisi pembagian berdasarkan durasi rawat inap.
+                    Pohon ini menunjukkan proses pengambilan keputusan model C4.5 yang dioptimasi oleh PSO.
+                    Setiap node menunjukkan kondisi pembagian berdasarkan fitur Bulan Masuk dan Hari Dalam Minggu.
+                    Warna setiap kotak node mencerminkan distribusi kelas di dalamnya:
+                    - Merah = Lama (>10 hari)
+                    - Hijau = Sedang (6-10 hari)
+                    - Biru  = Singkat (≤5 hari)
+                    Node internal (percabangan) memiliki baris kondisi split di atasnya. Node daun (HASIL) menampilkan prediksi akhir.
                     """)
                 
-                # Visualisasi pohon keputusan
-                plt.figure(figsize=(20, 12))
-                plot_tree(
+                # Visualisasi pohon keputusan dengan tema gelap
+                fig_tree = plot_decision_tree_dark(
                     model_results['optimized_model'],
-                    feature_names=['Durasi (hari)'],
-                    class_names=['Singkat', 'Sedang', 'Lama'],
-                    filled=True,
-                    rounded=True,
-                    fontsize=10,
-                    max_depth=3,  # Menunjukkan 3 level pertama untuk kejelasan
-                    impurity=False,
-                    proportion=True
+                    feature_names=['Bulan Masuk', 'Hari Dalam Minggu'],
+                    class_names=['Lama', 'Sedang', 'Singkat']
                 )
-                st.pyplot(plt)
+                st.pyplot(fig_tree)
+                plt.close(fig_tree)
                 st.markdown('</div>', unsafe_allow_html=True)
                 
-                # Representasi teks
-                st.markdown('<div class="custom-card"><h3>📝 Representasi Teks</h3>', unsafe_allow_html=True)
+                # Representasi teks pohon
+                st.markdown('<div class="custom-card"><h3>📝 Representasi Teks Pohon</h3>', unsafe_allow_html=True)
                 tree_text = export_text(
                     model_results['optimized_model'],
-                    feature_names=['Durasi'],
+                    feature_names=['Bulan Masuk', 'Hari Dalam Minggu'],
                     max_depth=3
                 )
                 st.code(tree_text)
@@ -1473,6 +1586,7 @@ def show_dashboard():
                 )
                 st.markdown('</div>', unsafe_allow_html=True)
             
+            # ========== TAB 4: PREDIKSI BARU ==========
             with tab4:
                 st.markdown('<div class="custom-card"><h3>🔮 Prediksi Pasien Baru</h3>', unsafe_allow_html=True)
                 st.markdown("""
@@ -1500,21 +1614,22 @@ def show_dashboard():
                     else:
                         if 'label_encoder' in st.session_state and 'optimized_model' in model_results:
                             try:
-                                # Prediksi kategori
-                                prediksi = model_results['optimized_model'].predict([[durasi]])[0]
+                                # Fitur prediksi: bulan dan hari dalam minggu dari tanggal masuk
+                                import datetime
+                                bulan_masuk = tgl_masuk.month
+                                hari_dalam_minggu = tgl_masuk.weekday()  # 0=Senin
+
+                                prediksi = model_results['optimized_model'].predict([[bulan_masuk, hari_dalam_minggu]])[0]
                                 kategori = st.session_state['label_encoder'].inverse_transform([prediksi])[0]
                         
-                                # Animasi hasil prediksi
                                 with st.spinner('Memprediksi...'):
                                     time.sleep(1)
                                 
-                                st.success(f"✅ Kategori Durasi Prediksi: **{kategori}**")
+                                st.success(f"✅ Kategori Durasi Prediksi: **{kategori}** | Durasi Masuk: **{durasi} hari**")
                         
-                                # Visualisasi hasil prediksi
                                 col16, col17 = st.columns([1, 2])
                                 
                                 with col16:
-                                    # Tampilkan indikator kategori
                                     if kategori == 'Singkat':
                                         color = "#a1c4fd"
                                         icon = "⏱️"
@@ -1526,14 +1641,13 @@ def show_dashboard():
                                         icon = "⌛"
                                     
                                     fig_pred = go.Figure(go.Indicator(
-                                        mode = "number+delta",
-                                        value = durasi,
-                                        number = {'font': {'size': 40}, 'prefix': icon},
-                                        title = {'text': "Durasi (Hari)", 'font': {'size': 20}},
-                                        delta = {'reference': 5, 'position': "bottom"},
-                                        domain = {'x': [0, 1], 'y': [0, 1]}
+                                        mode="number+delta",
+                                        value=durasi,
+                                        number={'font': {'size': 40}, 'prefix': icon},
+                                        title={'text': "Durasi (Hari)", 'font': {'size': 20}},
+                                        delta={'reference': 5, 'position': "bottom"},
+                                        domain={'x': [0, 1], 'y': [0, 1]}
                                     ))
-                                    
                                     fig_pred.update_layout(
                                         height=300,
                                         paper_bgcolor=color,
@@ -1542,13 +1656,12 @@ def show_dashboard():
                                     st.plotly_chart(fig_pred, use_container_width=True)
                                 
                                 with col17:
-                                    # Rekomendasi
                                     st.markdown(f"""
                                     <div style="background: rgba(255, 255, 255, 0.7); 
                                                 padding: 1.5rem; border-radius: 15px; color: #2b5876;
                                                 border: 1px solid rgba(255, 255, 255, 0.5);">
                                         <h3>📋 Rekomendasi Manajemen Ruangan</h3>
-                                        <p><strong>Kategori: {kategori}</strong></p>
+                                        <p><strong>Kategori Prediksi: {kategori}</strong></p>
                                     """, unsafe_allow_html=True)
                                     
                                     if kategori == 'Singkat':
@@ -1581,14 +1694,13 @@ def show_dashboard():
                             st.stop()
                 st.markdown('</div>', unsafe_allow_html=True)
 
+            # ========== TAB 5: ESTIMASI RUANGAN ==========
             with tab5:
                 st.markdown('<div class="custom-card"><h3>🏥 Estimasi Kebutuhan Ruangan</h3>', unsafe_allow_html=True)
                 
-                # Hitung distribusi pasien
                 distribusi = df_processed['Kategori Durasi'].value_counts().reset_index()
                 distribusi.columns = ['Kategori', 'Jumlah Pasien']
                 
-                # Visualisasi distribusi
                 fig_dist = px.bar(
                     distribusi,
                     x='Kategori',
@@ -1604,7 +1716,6 @@ def show_dashboard():
                 )
                 st.plotly_chart(fig_dist, use_container_width=True)
                 
-                # Rekomendasi alokasi ruangan
                 st.markdown("""
                 <div style="background: rgba(255, 255, 255, 0.7); 
                             padding: 1.5rem; border-radius: 15px; color: #2b5876; margin-top: 1rem;
@@ -1668,8 +1779,6 @@ def show_dashboard():
 
     else:
         # Tampilan awal sebelum upload file
-        col21, col22, col23 = st.columns([1, 2, 1])
-        
         with st.container():
             st.markdown(f"""
             <div style="text-align: center; padding: 3rem; background: rgba(255, 255, 255, 0.8); 
@@ -1686,7 +1795,6 @@ def show_dashboard():
             </div>
             """, unsafe_allow_html=True)
             
-            # Fitur animasi
             st.markdown("""
             <div style="text-align: center; margin-top: 2rem;">
                 <lottie-player src="https://assets1.lottiefiles.com/packages/lf20_ukaaZq.json"  
@@ -1699,9 +1807,6 @@ def show_dashboard():
 
 # Fungsi untuk menampilkan halaman utama/beranda
 def show_home_page():
-    # ======================
-    # Header section dengan efek paralaks
-    # ======================
     st.markdown("""
     <div style="padding: 50px 0 40px 0; text-align: center; line-height:1.3;">
         <div style="font-size: 42px; font-weight: 800; color: #005;">
@@ -1716,9 +1821,6 @@ def show_home_page():
     </div>
     """, unsafe_allow_html=True)
 
-    # ======================
-    # Introduction section (Tentang Sistem)
-    # ======================
     st.markdown("<div>", unsafe_allow_html=True)
     st.markdown("""
     <h3 class='glass' style='color: #0d47a1; text-align: center; margin-bottom: 30px;'>Tentang Sistem</h3>
@@ -1731,14 +1833,10 @@ def show_home_page():
     """, unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # ======================
-    # Features section (Fitur Utama)
-    # ======================
     st.markdown("<h2 style='text-align: center; color: #fff; margin: 60px 0 40px 0; text-shadow: 1px 1px 3px rgba(0,0,0,0.2);'>Fitur Utama</h2>", unsafe_allow_html=True)
-    col1, col2, col3 = st.columns(3)  # Membagi layout menjadi 3 kolom
+    col1, col2, col3 = st.columns(3)
 
     with col1:
-        # Feature 1: Klasifikasi Akurat
         st.markdown("""
         <div class='feature-card'>
         <div class='card-title'>🎯 Klasifikasi Akurat</div>
@@ -1749,7 +1847,6 @@ def show_home_page():
         """, unsafe_allow_html=True)
 
     with col2:
-        # Feature 2: Optimasi Parameter
         st.markdown("""
         <div class='feature-card'>
         <div class='card-title'>⚙️ Optimasi Parameter </div>
@@ -1761,7 +1858,6 @@ def show_home_page():
         """, unsafe_allow_html=True)
 
     with col3:
-        # Feature 3: Dashboard Interaktif
         st.markdown("""
         <div class='feature-card'>
         <div class='card-title'>📊 Dashboard</div>
@@ -1772,15 +1868,11 @@ def show_home_page():
         </div>
         """, unsafe_allow_html=True)
 
-    # ======================
-    # Methodology section (Metodologi)
-    # ======================
     st.markdown("<div style='margin-top: 60px;'>", unsafe_allow_html=True)
     st.markdown("<h3 class='glass' style='color: #0d47a1; text-align: center; margin-bottom: 40px;'>Metodologi</h3>", unsafe_allow_html=True)
     col1, col2 = st.columns(2)
 
     with col1:
-        # Algoritma C4.5
         st.markdown("""
         <div style="padding: 20px; background: rgba(13, 71, 161, 0.1); border-radius: 16px; margin-bottom: 10px;">
         <h4 style='color: #0d47a1; margin-bottom: 8px;'>Algoritma C4.5</h4>
@@ -1795,7 +1887,6 @@ def show_home_page():
         """, unsafe_allow_html=True)
 
     with col2:
-        # Particle Swarm Optimization
         st.markdown("""
         <div style="padding: 20px; background: rgba(13, 71, 161, 0.1); border-radius: 16px; margin-bottom: 10px;">
         <h4 style='color: #0d47a1; margin-bottom: 8px;'>Particle Swarm Optimization</h4>
@@ -1811,28 +1902,23 @@ def show_home_page():
         """, unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # ======================
-    # System Status section (Status Sistem & Database)
-    # ======================
     st.markdown("<div style='margin-top: 60px;'>", unsafe_allow_html=True)
     st.markdown("<h3 class='glass' style='color: #0d47a1; text-align: center; margin-bottom: 30px;'>Status Sistem</h3>", unsafe_allow_html=True)
     col1, col2 = st.columns(2)
 
     with col1:
-        # Koneksi Database
         st.markdown("<div class='feature-card card-title'>🔌 Koneksi Database</div></div>", unsafe_allow_html=True)
         if st.button("Test Koneksi Database", use_container_width=True):
-            conn = init_db_connection()  # Fungsi koneksi ke database
+            conn = init_db_connection()
             if conn:
                 st.success("✅ Terhubung ke database Supabase")
-                create_tables(conn)       # Fungsi untuk membuat tabel jika belum ada
+                create_tables(conn)
                 conn.close()
             else:
                 st.error("❌ Gagal terhubung ke database")
         st.markdown("</div>", unsafe_allow_html=True)
 
     with col2:
-        # Status layanan lain
         st.markdown("<div class='feature-card card-title'>📈 Status Layanan", unsafe_allow_html=True)
         st.markdown("""
         <div class='card-content' style='line-height: 1; color:#005;' >
@@ -1846,8 +1932,6 @@ def show_home_page():
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    
-    # Footer
     st.markdown("""
     <div class='footer'>
     <p style=font-size: 17px; opacity: 1;">© 2025 RSUD Muyang Kute - Sistem Klasifikasi Durasi Rawat Inap Pasien Skizofrenia</p>
@@ -1857,30 +1941,20 @@ def show_home_page():
 
 # Fungsi utama aplikasi Streamlit
 def main():
-    # Inisialisasi session state
-    # Digunakan untuk menyimpan data antar rerender, seperti halaman aktif dan user login
     if "page" not in st.session_state:
-        st.session_state.page = "home"  # halaman default adalah 'home'
+        st.session_state.page = "home"
     if "user" not in st.session_state:
-        st.session_state.user = None     # user belum login, set ke None
+        st.session_state.user = None
     
-    # Logika navigasi halaman
     if st.session_state.page == "home":
-        # Membuat tab navigasi di halaman beranda
         tabs = st.tabs(["🏠 Beranda", "🔐 Masuk"])
-        
-        # Konten tab "Beranda"
         with tabs[0]:
-            show_home_page()  # memanggil fungsi untuk menampilkan halaman home
-        
-        # Konten tab "Masuk"
+            show_home_page()
         with tabs[1]:
-            show_login_page()  # memanggil fungsi untuk menampilkan halaman login
+            show_login_page()
     
-    # Jika user sudah login dan page diarahkan ke dashboard
     elif st.session_state.page == "dashboard":
-        show_dashboard()  # menampilkan halaman dashboard
+        show_dashboard()
 
-# Menjalankan aplikasi jika file ini dieksekusi langsung
 if __name__ == "__main__":
     main()
