@@ -841,7 +841,7 @@ def plot_decision_tree_dark(model, feature_names, class_names, max_depth=4):
     TEXT_SEC = '#4a4a4a'    # Abu gelap untuk text sekunder
 
     # ===== LAYOUT POHON =====
-    def layout_tree(tree_obj, max_depth_limit=6):
+    def layout_tree(tree_obj, max_depth_limit=4):
         children_left = tree_obj.children_left
         children_right = tree_obj.children_right
         
